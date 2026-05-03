@@ -1,4 +1,4 @@
 ﻿using DiceGame;
 
-var g = new Game(numPlayers: 1);
+var g = new Game(numPlayers: 2);
 g.Start();

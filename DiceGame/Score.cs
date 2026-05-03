@@ -3,7 +3,9 @@
 public record Score
 {
 	private int _score;
-	
+
+	public int Value => _score;
+
 	public void Clear()
 	{
 		_score = 0;
