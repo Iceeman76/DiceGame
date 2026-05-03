@@ -50,6 +50,9 @@ public sealed class ThresholdStrategy(string name) : IPlayerStrategy
     /// <summary>When true, always takes inherited dice while trailing the leader, regardless of <see cref="TakeInheritanceMinScore"/>.</summary>
     public bool TakeInheritanceWhenTrailing { get; init; }
 
+    /// <summary>When true, the player will not stop in the final round unless their projected score exceeds the current leader's score.</summary>
+    public bool ChaseLeadInFinalRound { get; init; } = true;
+
     /// <summary>Returns true if the player should stop before the next roll and pass the dice.</summary>
     public bool ShouldStop(GameState state)
     {
@@ -74,7 +77,17 @@ public sealed class ThresholdStrategy(string name) : IPlayerStrategy
             threshold = StopThresholdFinalRounds;
         }
 
-        return state.RoundScore >= threshold;
+        if (state.RoundScore < threshold)
+        {
+            return false;
+        }
+
+        if (ChaseLeadInFinalRound && state.RoundsLeft == 0 && state.MyTotalScore + state.RoundScore <= state.LeaderScore)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>Returns true if the player should take the dice and score passed by the previous player.</summary>
