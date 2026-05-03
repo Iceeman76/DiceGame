@@ -149,13 +149,17 @@ public sealed class Game
     private static int KeepScoringDice(Dice hand, Dice table)
     {
         var score = 0;
-
         var onesCount = hand.Count(x => x == 1);
+
         if (onesCount >= 3)
         {
             score += 1000;
-            hand.RemoveAll(x => x == 1);
-            for (var i = 0; i < onesCount; i++) table.Add(1);
+
+            for (var i = 0; i < 3; i++)
+            {
+                hand.Remove(1);
+                table.Add(1);
+            }
         }
 
         var twosCount = hand.Count(x => x == 2);
