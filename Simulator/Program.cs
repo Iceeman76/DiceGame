@@ -4,32 +4,60 @@ using DiceGame;
 
 const int simulations = 10_000;
 
-var strategies = new IPlayerStrategy[]
+// --- Strategi-jämförelse ---
+Simulate("Strategi-jämförelse", simulations, new IPlayerStrategy[]
 {
     PlayerStrategies.Passive(),
     PlayerStrategies.Bold(),
     PlayerStrategies.Adaptive()
+});
+
+// --- Är det värt att chansa med 1 tärning? ---
+// Identiska strategier som bara skiljer sig på MinHandDiceToRoll.
+// Scenario: du har fått t.ex. 5,5,2,2 passerat (300p), 1 tärning kvar att slå.
+// 2/6 chans att spara den och få 5 nya tärningar — men 4/6 chans att busta och förlora allt.
+Simulate("Chansa med 1 tärning? (annars identisk strategi)", simulations, new IPlayerStrategy[]
+{
+    MakeAdaptive("Slår alltid", minDice: 1),
+    MakeAdaptive("Stannar vid 1 tärning", minDice: 2),
+    MakeAdaptive("Stannar vid ≤2 tärningar", minDice: 3)
+});
+
+static ThresholdStrategy MakeAdaptive(string name, int minDice) => new(name)
+{
+    StopThreshold = 350,
+    StopThresholdWhenLeading = 250,
+    StopThresholdWhenTrailing = 550,
+    TrailingGapTrigger = 200,
+    StopThresholdFinalRounds = 700,
+    FinalRoundsCount = 2,
+    TakeInheritanceMinScore = 250,
+    TakeInheritanceMinHandDice = 2,
+    TakeInheritanceWhenTrailing = true,
+    MinInheritedHandDiceToRoll = minDice
 };
 
-var wins = strategies.ToDictionary(s => s.Name, _ => 0);
-var totalScores = strategies.ToDictionary(s => s.Name, _ => 0L);
-
-for (var i = 0; i < simulations; i++)
+static void Simulate(string title, int n, IPlayerStrategy[] strats)
 {
-    var players = strategies.Select(s => new Player(s.Name, s)).ToArray();
-    var result = new Game(players, verbose: false).Start();
+    var wins = strats.ToDictionary(s => s.Name, _ => 0);
+    var totalScores = strats.ToDictionary(s => s.Name, _ => 0L);
 
-    wins[result.Winner]++;
-    foreach (var r in result.Rankings)
-        totalScores[r.Name] += r.Score;
-}
+    for (var i = 0; i < n; i++)
+    {
+        var players = strats.Select(s => new Player(s.Name, s)).ToArray();
+        var result = new Game(players, verbose: false).Start();
+        wins[result.Winner]++;
+        foreach (var r in result.Rankings)
+            totalScores[r.Name] += r.Score;
+    }
 
-Console.WriteLine($"Results after {simulations:N0} simulations:\n");
-Console.WriteLine($"{"Strategi",-12} {"Vinster",8}  {"Vinstprocent",12}  {"Snittpoäng",10}");
-Console.WriteLine(new string('-', 50));
-foreach (var s in strategies)
-{
-    var winPct = (double)wins[s.Name] / simulations * 100;
-    var avg = totalScores[s.Name] / simulations;
-    Console.WriteLine($"{s.Name,-12} {wins[s.Name],8}  {winPct,11:F1}%  {avg,9}p");
+    Console.WriteLine($"\n{title} ({n:N0} simuleringar):");
+    Console.WriteLine($"{"Strategi",-28} {"Vinster",8}  {"Vinstprocent",12}  {"Snittpoäng",10}");
+    Console.WriteLine(new string('-', 65));
+    foreach (var s in strats)
+    {
+        var winPct = (double)wins[s.Name] / n * 100;
+        var avg = totalScores[s.Name] / n;
+        Console.WriteLine($"{s.Name,-28} {wins[s.Name],8}  {winPct,11:F1}%  {avg,9}p");
+    }
 }

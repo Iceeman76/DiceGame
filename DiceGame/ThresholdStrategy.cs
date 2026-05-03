@@ -21,6 +21,11 @@ public class ThresholdStrategy : IPlayerStrategy
     /// Force stop after this many rolls per turn regardless of score (0 = unlimited).
     public int MaxRollsPerTurn { get; set; } = 0;
 
+    /// When inheriting dice (first roll of turn), stop if hand has fewer than this many dice to roll.
+    /// Only applies to inherited positions — has no effect when you rolled the dice yourself.
+    /// E.g. 2 = never risk a single inherited die.
+    public int MinInheritedHandDiceToRoll { get; set; } = 1;
+
     /// Take passed dice only if inherited score >= this (int.MaxValue = never).
     public int TakeInheritanceMinScore { get; set; } = int.MaxValue;
 
@@ -35,6 +40,9 @@ public class ThresholdStrategy : IPlayerStrategy
     public bool ShouldStop(GameState state)
     {
         if (MaxRollsPerTurn > 0 && state.RollsThisTurn >= MaxRollsPerTurn)
+            return true;
+
+        if (state.RollsThisTurn == 0 && state.HandDiceCount < MinInheritedHandDiceToRoll)
             return true;
 
         var threshold = state.IsLeading

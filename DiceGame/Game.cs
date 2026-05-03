@@ -64,6 +64,20 @@ public class Game
                 table = new Dice(0);
             }
 
+            // Decide BEFORE rolling — lets strategies react to dice count before committing
+            if (roundScore >= 250)
+            {
+                var state = BuildGameState(player, roundScore, hand, table, isLastInRound);
+                if (player.Strategy.ShouldStop(state))
+                {
+                    player.TotalScore.Add(roundScore);
+                    _passedTable = table;
+                    _passedScore = roundScore;
+                    Log($"{player.Name} stops with {roundScore}p (total: {player.TotalScore.Value}p)");
+                    return;
+                }
+            }
+
             _rollsThisTurn++;
             hand.Roll();
             Log($"Rolled: [{string.Join(", ", hand)}]  Table: [{string.Join(", ", table)}]  Score: {roundScore}p");
@@ -76,16 +90,6 @@ public class Game
 
             roundScore += KeepScoringDice(hand, table);
             Log($"Kept:   [{string.Join(", ", table)}]  Round score: {roundScore}p");
-
-            var state = BuildGameState(player, roundScore, hand, table, isLastInRound);
-            if (roundScore >= 250 && player.Strategy.ShouldStop(state))
-            {
-                player.TotalScore.Add(roundScore);
-                _passedTable = table;
-                _passedScore = roundScore;
-                Log($"{player.Name} stops with {roundScore}p (total: {player.TotalScore.Value}p)");
-                return;
-            }
         }
     }
 
