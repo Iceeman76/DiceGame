@@ -28,7 +28,9 @@ public sealed class Game
         {
             Log($"\n========= ROUND {_currentRound} =========");
             for (var i = 0; i < _players.Count; i++)
+            {
                 PlayTurn(_players[i], isLastInRound: i == _players.Count - 1);
+            }
         }
 
         var rankings = _players
@@ -40,7 +42,10 @@ public sealed class Game
         {
             Log("\n========= GAME OVER =========");
             for (var i = 0; i < rankings.Count; i++)
+            {
                 Log($"{i + 1}. {rankings[i].Name}: {rankings[i].Score}p");
+            }
+
             Log($"\nVinnare: {rankings[0].Name}!");
         }
 
