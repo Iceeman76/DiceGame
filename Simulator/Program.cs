@@ -4,19 +4,19 @@ using DiceGame;
 
 const int simulations = 10_000;
 
-Simulate("Strategi-jämförelse", simulations, new IPlayerStrategy[]
-{
+Simulate("Strategi-jämförelse", simulations,
+[
     PlayerStrategies.Passive(),
     PlayerStrategies.Bold(),
     PlayerStrategies.Adaptive()
-});
+]);
 
-Simulate("Chansa med 1 tärning? (annars identisk strategi)", simulations, new IPlayerStrategy[]
-{
+Simulate("Chansa? (annars identisk strategi)", simulations,
+[
     MakeAdaptive("Slår alltid", minDice: 1),
     MakeAdaptive("Stannar vid 1 tärning", minDice: 2),
     MakeAdaptive("Stannar vid ≤2 tärningar", minDice: 3)
-});
+]);
 
 return;
 
