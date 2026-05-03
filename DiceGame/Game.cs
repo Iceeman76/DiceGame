@@ -87,7 +87,11 @@ public sealed class Game
                 return;
             }
 
-            roundScore += KeepScoringDice(hand, table);
+            var selectionState = BuildGameState(player, roundScore, hand, table, isLastInRound);
+            var selection = player.Strategy.SelectDiceToKeep(hand, selectionState);
+
+            roundScore += KeepScoringDice(hand, table, selection);
+
             Log($"Kept:   [{string.Join(", ", table)}]  Round score: {roundScore}p");
         }
     }
@@ -146,7 +150,7 @@ public sealed class Game
         };
     }
 
-    private static int KeepScoringDice(Dice hand, Dice table)
+    private static int KeepScoringDice(Dice hand, Dice table, DiceSelection selection)
     {
         var score = 0;
         var onesCount = hand.Count(x => x == 1);
@@ -162,15 +166,21 @@ public sealed class Game
             }
         }
 
-        var twosCount = hand.Count(x => x == 2);
-        score += twosCount * 50;
-        hand.RemoveAll(x => x == 2);
-        for (var i = 0; i < twosCount; i++) table.Add(2);
+        score += selection.Twos * 50;
 
-        var fivesCount = hand.Count(x => x == 5);
-        score += fivesCount * 100;
-        hand.RemoveAll(x => x == 5);
-        for (var i = 0; i < fivesCount; i++) table.Add(5);
+        for (var i = 0; i < selection.Twos; i++)
+        {
+            hand.Remove(2);
+            table.Add(2);
+        }
+
+        score += selection.Fives * 100;
+
+        for (var i = 0; i < selection.Fives; i++)
+        {
+            hand.Remove(5);
+            table.Add(5);
+        }
 
         return score;
     }

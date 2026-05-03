@@ -1,3 +1,6 @@
+using System;
+using System.Linq;
+
 namespace DiceGame;
 
 public sealed class ThresholdStrategy(string name) : IPlayerStrategy
@@ -28,6 +31,12 @@ public sealed class ThresholdStrategy(string name) : IPlayerStrategy
 
     /// <summary>Minimum number of dice the player is willing to roll when entering an inherited position. Stops before rolling if hand is smaller. One means always roll.</summary>
     public int MinInheritedHandDiceToRoll { get; init; } = 1;
+
+    /// <summary>Maximum number of twos to keep per roll. Keeping fewer leaves more dice in hand for the next roll. Use <see cref="int.MaxValue"/> to keep all.</summary>
+    public int MaxTwosToKeepPerRoll { get; init; } = int.MaxValue;
+
+    /// <summary>Maximum number of fives to keep per roll. Keeping fewer leaves more dice in hand for the next roll. Use <see cref="int.MaxValue"/> to keep all.</summary>
+    public int MaxFivesToKeepPerRoll { get; init; } = int.MaxValue;
 
     /// <summary>Minimum inherited score required to take the passed dice. Use <see cref="int.MaxValue"/> to never take inherited dice.</summary>
     public int TakeInheritanceMinScore { get; init; } = int.MaxValue;
@@ -79,5 +88,22 @@ public sealed class ThresholdStrategy(string name) : IPlayerStrategy
         }
 
         return state.InheritedScore >= TakeInheritanceMinScore;
+    }
+
+    /// <summary>Returns how many twos and fives to save from the current hand. Always keeps at least one die when scoring dice are available.</summary>
+    public DiceSelection SelectDiceToKeep(Dice hand, GameState state)
+    {
+        var availableTwos = hand.Count(x => x == 2);
+        var availableFives = hand.Count(x => x == 5);
+        var twos = Math.Min(availableTwos, MaxTwosToKeepPerRoll);
+        var fives = Math.Min(availableFives, MaxFivesToKeepPerRoll);
+
+        if (twos == 0 && fives == 0)
+        {
+            twos = availableTwos > 0 ? 1 : 0;
+            fives = twos == 0 && availableFives > 0 ? 1 : 0;
+        }
+
+        return new DiceSelection(twos, fives);
     }
 }
