@@ -2,16 +2,18 @@
 
 public static class PlayerStrategies
 {
-    public static ThresholdStrategy Passive() => new("Passiv")
+    public static ThresholdStrategy Passive() => new()
     {
+        Name = "Passive",
         StopThreshold = 250,
         StopThresholdWhenLeading = 250,
         StopThresholdWhenTrailing = 250,
         TakeInheritanceMinScore = int.MaxValue
     };
 
-    public static ThresholdStrategy Bold() => new("Bold")
+    public static ThresholdStrategy Bold() => new()
     {
+        Name = "Bold",
         StopThreshold = 600,
         StopThresholdWhenLeading = 600,
         StopThresholdWhenTrailing = 600,
@@ -19,16 +21,9 @@ public static class PlayerStrategies
         TakeInheritanceMinHandDice = 1
     };
 
-    public static ThresholdStrategy Idiot() => new("Idiot")
+    public static ThresholdStrategy Adaptive() => new()
     {
-        StopThreshold = 250,
-        MaxFivesToKeepPerRoll = 0,
-        SaveTripleOnes = false,
-        TakeInheritanceMinScore = int.MaxValue
-    };
-
-    public static ThresholdStrategy Adaptive() => new("Adaptiv")
-    {
+        Name = "Adaptive",
         StopThreshold = 350,
         StopThresholdWhenLeading = 250,
         StopThresholdWhenTrailing = 550,

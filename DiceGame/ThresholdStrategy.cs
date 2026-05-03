@@ -3,10 +3,10 @@ using System.Linq;
 
 namespace DiceGame;
 
-public sealed class ThresholdStrategy(string name) : IPlayerStrategy
+public sealed record ThresholdStrategy : IPlayerStrategy
 {
     /// <summary>Display name for this strategy.</summary>
-    public string Name { get; } = name;
+    public string Name { get; init; } = "DiceMaster";
 
     /// <summary>Base round score threshold at which the player considers stopping.</summary>
     public int StopThreshold { get; init; } = 300;

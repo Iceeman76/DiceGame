@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using DiceGame;
 
-const int simulations = 10_000;
+const int simulations = 25_000;
 
 Simulate("Strategi-jämförelse", simulations,
 [
@@ -20,42 +20,45 @@ Simulate("Chansa? (annars identisk strategi)", simulations,
 
 return;
 
-static ThresholdStrategy MakeAdaptive(string name, int minDice) => new(name)
+static ThresholdStrategy MakeAdaptive(string name, int minDice) => PlayerStrategies.Adaptive() with
 {
-    StopThreshold = 350,
-    StopThresholdWhenLeading = 250,
-    StopThresholdWhenTrailing = 550,
-    TrailingGapTrigger = 200,
-    StopThresholdFinalRounds = 700,
-    FinalRoundsCount = 2,
-    TakeInheritanceMinScore = 250,
-    TakeInheritanceMinHandDice = 2,
-    TakeInheritanceWhenTrailing = true,
+    Name = name,
     MinInheritedHandDiceToRoll = minDice
 };
 
-static void Simulate(string title, int n, IPlayerStrategy[] strats)
+static void Simulate(string title, int n, IPlayerStrategy[] strategies)
 {
-    var wins = strats.ToDictionary(s => s.Name, _ => 0);
-    var totalScores = strats.ToDictionary(s => s.Name, _ => 0L);
+    var wins = strategies.ToDictionary(s => s.Name, _ => 0);
+    var totalScores = strategies.ToDictionary(s => s.Name, _ => 0L);
+    var maxScores = strategies.ToDictionary(s => s.Name, _ => 0);
 
     for (var i = 0; i < n; i++)
     {
-        var players = strats.Select(s => new Player(s.Name, s)).ToArray();
-        var result = new Game(players, verbose: false).Start();
+        var players = strategies.Select(s => new Player(s.Name, s)).ToArray();
+        var result = new Game(players, verbose: false, randomizeOrder: true).Start();
+
         wins[result.Winner]++;
-        foreach (var r in result.Rankings)
-            totalScores[r.Name] += r.Score;
+
+        foreach (var rank in result.Rankings)
+        {
+            totalScores[rank.Name] += rank.Score;
+
+            if (rank.Score > maxScores[rank.Name])
+            {
+                maxScores[rank.Name] = rank.Score;
+            }
+        }
     }
 
-    Console.WriteLine($"\n{title} ({n:N0} simuleringar):");
-    Console.WriteLine($"{"Strategi",-28} {"Vinster",8}  {"Vinstprocent",12}  {"Snittpoäng",10}");
-    Console.WriteLine(new string('-', 65));
+    Console.WriteLine($"\n{title} ({n:N0} simuleringar):\n");
+    Console.WriteLine($"{"Strategi",-28} {"Vinster",8}  {"Vinstprocent",12}  {"Snitt",10}  {"Högsta",12}");
+    Console.WriteLine(new string('-', 80));
 
-    foreach (var s in strats)
+    foreach (var strategy in strategies)
     {
-        var winPct = (double)wins[s.Name] / n * 100;
-        var avg = totalScores[s.Name] / n;
-        Console.WriteLine($"{s.Name,-28} {wins[s.Name],8}  {winPct,11:F1}%  {avg,9}p");
+        var winPct = (double)wins[strategy.Name] / n * 100;
+        var avg = totalScores[strategy.Name] / n;
+
+        Console.WriteLine($"{strategy.Name,-28} {wins[strategy.Name],8}  {winPct,11:F1}%  {avg,9}p  {maxScores[strategy.Name],10}p");
     }
 }

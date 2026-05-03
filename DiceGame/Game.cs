@@ -16,10 +16,15 @@ public sealed class Game
     private Dice? _passedTable;
     private int _passedScore;
 
-    public Game(IEnumerable<Player> players, bool verbose = true)
+    public Game(IEnumerable<Player> players, bool verbose = true, bool randomizeOrder = false)
     {
         _players = players.ToList();
         _verbose = verbose;
+
+        if (randomizeOrder)
+        {
+            Randomizer.Shuffle(_players);
+        }
     }
 
     public GameResult Start()
