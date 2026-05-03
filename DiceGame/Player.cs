@@ -1,14 +1,8 @@
 namespace DiceGame;
 
-public class Player
+public sealed class Player(string name, IPlayerStrategy strategy)
 {
-    public string Name { get; }
-    public IPlayerStrategy Strategy { get; }
+    public string Name { get; } = name;
+    public IPlayerStrategy Strategy { get; } = strategy;
     public Score TotalScore { get; } = new();
-
-    public Player(string name, IPlayerStrategy strategy)
-    {
-        Name = name;
-        Strategy = strategy;
-    }
 }

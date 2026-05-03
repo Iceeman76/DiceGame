@@ -1,49 +1,32 @@
 namespace DiceGame;
 
-public class ThresholdStrategy : IPlayerStrategy
+public sealed class ThresholdStrategy(string name) : IPlayerStrategy
 {
-    public string Name { get; }
+    public string Name { get; } = name;
 
-    /// Stop when round score >= this.
-    public int StopThreshold { get; set; } = 300;
-
-    /// When leading, use this lower threshold to protect the lead.
-    public int StopThresholdWhenLeading { get; set; } = 300;
-
-    /// When trailing the leader by >= TrailingGapTrigger points, use this higher threshold.
-    public int StopThresholdWhenTrailing { get; set; } = 300;
-    public int TrailingGapTrigger { get; set; } = int.MaxValue;
-
-    /// In the last FinalRoundsCount rounds, use this threshold (overrides all others).
-    public int StopThresholdFinalRounds { get; set; } = 300;
-    public int FinalRoundsCount { get; set; } = 0;
-
-    /// Force stop after this many rolls per turn regardless of score (0 = unlimited).
-    public int MaxRollsPerTurn { get; set; } = 0;
-
-    /// When inheriting dice (first roll of turn), stop if hand has fewer than this many dice to roll.
-    /// Only applies to inherited positions — has no effect when you rolled the dice yourself.
-    /// E.g. 2 = never risk a single inherited die.
-    public int MinInheritedHandDiceToRoll { get; set; } = 1;
-
-    /// Take passed dice only if inherited score >= this (int.MaxValue = never).
-    public int TakeInheritanceMinScore { get; set; } = int.MaxValue;
-
-    /// Also require at least this many dice remaining to roll after taking.
-    public int TakeInheritanceMinHandDice { get; set; } = 1;
-
-    /// Always take passed dice when trailing the leader, regardless of inherited score.
-    public bool TakeInheritanceWhenTrailing { get; set; } = false;
-
-    public ThresholdStrategy(string name) => Name = name;
+    public int StopThreshold { get; init; } = 300;
+    public int StopThresholdWhenLeading { get; init; } = 300;
+    public int StopThresholdWhenTrailing { get; init; } = 300;
+    public int TrailingGapTrigger { get; init; } = int.MaxValue;
+    public int StopThresholdFinalRounds { get; init; } = 300;
+    public int FinalRoundsCount { get; init; } = 0;
+    public int MaxRollsPerTurn { get; init; } = 0;
+    public int MinInheritedHandDiceToRoll { get; init; } = 1;
+    public int TakeInheritanceMinScore { get; init; } = int.MaxValue;
+    public int TakeInheritanceMinHandDice { get; init; } = 1;
+    public bool TakeInheritanceWhenTrailing { get; init; } = false;
 
     public bool ShouldStop(GameState state)
     {
         if (MaxRollsPerTurn > 0 && state.RollsThisTurn >= MaxRollsPerTurn)
+        {
             return true;
+        }
 
         if (state.RollsThisTurn == 0 && state.HandDiceCount < MinInheritedHandDiceToRoll)
+        {
             return true;
+        }
 
         var threshold = state.IsLeading
             ? StopThresholdWhenLeading
@@ -52,7 +35,9 @@ public class ThresholdStrategy : IPlayerStrategy
                 : StopThreshold;
 
         if (FinalRoundsCount > 0 && state.RoundsLeft <= FinalRoundsCount)
+        {
             threshold = StopThresholdFinalRounds;
+        }
 
         return state.RoundScore >= threshold;
     }
@@ -60,10 +45,14 @@ public class ThresholdStrategy : IPlayerStrategy
     public bool ShouldTakePassedDice(GameState state)
     {
         if (state.InheritedHandDiceCount < TakeInheritanceMinHandDice)
+        {
             return false;
+        }
 
         if (TakeInheritanceWhenTrailing && !state.IsLeading)
+        {
             return true;
+        }
 
         return state.InheritedScore >= TakeInheritanceMinScore;
     }

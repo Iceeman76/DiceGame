@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace DiceGame;
 
-public class Game
+public sealed class Game
 {
     private readonly List<Player> _players;
     private readonly bool _verbose;
@@ -64,7 +64,6 @@ public class Game
                 table = new Dice(0);
             }
 
-            // Decide BEFORE rolling — lets strategies react to dice count before committing
             if (roundScore >= 250)
             {
                 var state = BuildGameState(player, roundScore, hand, table, isLastInRound);
@@ -96,7 +95,9 @@ public class Game
     private (Dice table, int score) InitializeTurn(Player player, bool isLastInRound)
     {
         if (_passedTable is null)
+        {
             return (new Dice(0), 0);
+        }
 
         var passed = _passedTable;
         var passedScore = _passedScore;
@@ -145,8 +146,6 @@ public class Game
         };
     }
 
-    // Moves all scoring dice from hand to table and returns the points gained.
-    // Ones only score if there are 3+ in the same roll and cannot be saved individually.
     private static int KeepScoringDice(Dice hand, Dice table)
     {
         var score = 0;
@@ -174,6 +173,9 @@ public class Game
 
     private void Log(string message)
     {
-        if (_verbose) Console.WriteLine(message);
+        if (_verbose)
+        {
+            Console.WriteLine(message);
+        }
     }
 }

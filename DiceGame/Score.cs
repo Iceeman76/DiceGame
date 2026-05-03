@@ -1,18 +1,8 @@
-﻿namespace DiceGame;
+namespace DiceGame;
 
-public record Score
+public sealed record Score
 {
-	private int _score;
+    public int Value { get; private set; }
 
-	public int Value => _score;
-
-	public void Clear()
-	{
-		_score = 0;
-	}
-
-	public void Add(int score)
-	{
-		_score += score;
-	}
+    public void Add(int score) => Value += score;
 }

@@ -4,7 +4,6 @@ using DiceGame;
 
 const int simulations = 10_000;
 
-// --- Strategi-jämförelse ---
 Simulate("Strategi-jämförelse", simulations, new IPlayerStrategy[]
 {
     PlayerStrategies.Passive(),
@@ -12,16 +11,14 @@ Simulate("Strategi-jämförelse", simulations, new IPlayerStrategy[]
     PlayerStrategies.Adaptive()
 });
 
-// --- Är det värt att chansa med 1 tärning? ---
-// Identiska strategier som bara skiljer sig på MinHandDiceToRoll.
-// Scenario: du har fått t.ex. 5,5,2,2 passerat (300p), 1 tärning kvar att slå.
-// 2/6 chans att spara den och få 5 nya tärningar — men 4/6 chans att busta och förlora allt.
 Simulate("Chansa med 1 tärning? (annars identisk strategi)", simulations, new IPlayerStrategy[]
 {
     MakeAdaptive("Slår alltid", minDice: 1),
     MakeAdaptive("Stannar vid 1 tärning", minDice: 2),
     MakeAdaptive("Stannar vid ≤2 tärningar", minDice: 3)
 });
+
+return;
 
 static ThresholdStrategy MakeAdaptive(string name, int minDice) => new(name)
 {
@@ -54,6 +51,7 @@ static void Simulate(string title, int n, IPlayerStrategy[] strats)
     Console.WriteLine($"\n{title} ({n:N0} simuleringar):");
     Console.WriteLine($"{"Strategi",-28} {"Vinster",8}  {"Vinstprocent",12}  {"Snittpoäng",10}");
     Console.WriteLine(new string('-', 65));
+
     foreach (var s in strats)
     {
         var winPct = (double)wins[s.Name] / n * 100;
