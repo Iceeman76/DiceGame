@@ -1,6 +1,14 @@
 namespace DiceGame;
 
-public record Player(string Name)
+public class Player
 {
-	public Score TotalScore { get; } = new();
+    public string Name { get; }
+    public IPlayerStrategy Strategy { get; }
+    public Score TotalScore { get; } = new();
+
+    public Player(string name, IPlayerStrategy strategy)
+    {
+        Name = name;
+        Strategy = strategy;
+    }
 }

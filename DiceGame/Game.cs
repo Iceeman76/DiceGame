@@ -6,128 +6,170 @@ namespace DiceGame;
 
 public class Game
 {
-	private readonly List<Player> _players;
-	private const int TotalRounds = 10;
+    private readonly List<Player> _players;
+    private readonly bool _verbose;
+    private const int TotalRounds = 10;
 
-	// State passed between consecutive player turns
-	private Dice? _passedTable;
-	private int _passedScore;
+    private int _currentRound;
+    private int _rollsThisTurn;
 
-	public Game(int numPlayers)
-	{
-		_players = Enumerable.Range(1, numPlayers)
-			.Select(i => new Player($"Player {i}"))
-			.ToList();
-	}
+    private Dice? _passedTable;
+    private int _passedScore;
 
-	public void Start()
-	{
-		for (var round = 1; round <= TotalRounds; round++)
-		{
-			Console.WriteLine($"\n========= ROUND {round} =========");
-			foreach (var player in _players)
-				PlayTurn(player);
-		}
+    public Game(IEnumerable<Player> players, bool verbose = true)
+    {
+        _players = players.ToList();
+        _verbose = verbose;
+    }
 
-		PrintResults();
-	}
+    public GameResult Start()
+    {
+        for (_currentRound = 1; _currentRound <= TotalRounds; _currentRound++)
+        {
+            Log($"\n========= ROUND {_currentRound} =========");
+            for (var i = 0; i < _players.Count; i++)
+                PlayTurn(_players[i], isLastInRound: i == _players.Count - 1);
+        }
 
-	private void PlayTurn(Player player)
-	{
-		Console.WriteLine($"\n--- {player.Name}'s turn ---");
+        var rankings = _players
+            .OrderByDescending(p => p.TotalScore.Value)
+            .Select(p => new PlayerResult(p.Name, p.TotalScore.Value))
+            .ToList();
 
-		var (table, roundScore) = InitializeTurn(player);
-		var hand = new Dice(5 - table.Count);
+        if (_verbose)
+        {
+            Log("\n========= GAME OVER =========");
+            for (var i = 0; i < rankings.Count; i++)
+                Log($"{i + 1}. {rankings[i].Name}: {rankings[i].Score}p");
+            Log($"\nVinnare: {rankings[0].Name}!");
+        }
 
-		while (true)
-		{
-			if (hand.Count == 0)
-			{
-				Console.WriteLine("All dice kept — rolling fresh set.");
-				hand = new Dice(5);
-				table = new Dice(0);
-			}
+        return new GameResult(rankings);
+    }
 
-			hand.Roll();
-			Console.WriteLine($"Rolled: [{string.Join(", ", hand)}]  Table: [{string.Join(", ", table)}]  Score: {roundScore}p");
+    private void PlayTurn(Player player, bool isLastInRound)
+    {
+        Log($"\n--- {player.Name}'s turn ---");
+        _rollsThisTurn = 0;
 
-			if (hand.Score() == 0)
-			{
-				Console.WriteLine($"{player.Name} busted! Round score lost.");
-				return;
-			}
+        var (table, roundScore) = InitializeTurn(player, isLastInRound);
+        var hand = new Dice(5 - table.Count);
 
-			roundScore += KeepScoringDice(hand, table);
-			Console.WriteLine($"Kept:   [{string.Join(", ", table)}]  Round score: {roundScore}p");
+        while (true)
+        {
+            if (hand.Count == 0)
+            {
+                Log("All dice kept — rolling fresh set.");
+                hand = new Dice(5);
+                table = new Dice(0);
+            }
 
-			if (roundScore >= 250 && ShouldStop())
-			{
-				player.TotalScore.Add(roundScore);
-				_passedTable = table;
-				_passedScore = roundScore;
-				Console.WriteLine($"{player.Name} stops with {roundScore}p (total: {player.TotalScore.Value}p)");
-				return;
-			}
-		}
-	}
+            _rollsThisTurn++;
+            hand.Roll();
+            Log($"Rolled: [{string.Join(", ", hand)}]  Table: [{string.Join(", ", table)}]  Score: {roundScore}p");
 
-	private (Dice table, int score) InitializeTurn(Player player)
-	{
-		if (_passedTable is null)
-			return (new Dice(0), 0);
+            if (hand.Score() == 0)
+            {
+                Log($"{player.Name} busted! Round score lost.");
+                return;
+            }
 
-		var passed = _passedTable;
-		var passedScore = _passedScore;
-		_passedTable = null;
-		_passedScore = 0;
+            roundScore += KeepScoringDice(hand, table);
+            Log($"Kept:   [{string.Join(", ", table)}]  Round score: {roundScore}p");
 
-		if (ShouldTakePassedDice())
-		{
-			Console.WriteLine($"{player.Name} takes passed dice [{string.Join(", ", passed)}] with {passedScore}p");
-			return (passed, passedScore);
-		}
+            var state = BuildGameState(player, roundScore, hand, table, isLastInRound);
+            if (roundScore >= 250 && player.Strategy.ShouldStop(state))
+            {
+                player.TotalScore.Add(roundScore);
+                _passedTable = table;
+                _passedScore = roundScore;
+                Log($"{player.Name} stops with {roundScore}p (total: {player.TotalScore.Value}p)");
+                return;
+            }
+        }
+    }
 
-		Console.WriteLine($"{player.Name} starts fresh (skips {passedScore}p from passed dice)");
-		return (new Dice(0), 0);
-	}
+    private (Dice table, int score) InitializeTurn(Player player, bool isLastInRound)
+    {
+        if (_passedTable is null)
+            return (new Dice(0), 0);
 
-	// Moves all scoring dice from hand to table and returns the points gained.
-	// Ones only score if there are 3+ in the same roll and cannot be saved individually.
-	private static int KeepScoringDice(Dice hand, Dice table)
-	{
-		var score = 0;
+        var passed = _passedTable;
+        var passedScore = _passedScore;
+        _passedTable = null;
+        _passedScore = 0;
 
-		var onesCount = hand.Count(x => x == 1);
-		if (onesCount >= 3)
-		{
-			score += 1000;
-			hand.RemoveAll(x => x == 1);
-			for (var i = 0; i < onesCount; i++) table.Add(1);
-		}
+        var state = BuildGameState(player, 0, new Dice(0), passed, isLastInRound,
+            inheritedScore: passedScore, inheritedTableCount: passed.Count);
 
-		var twosCount = hand.Count(x => x == 2);
-		score += twosCount * 50;
-		hand.RemoveAll(x => x == 2);
-		for (var i = 0; i < twosCount; i++) table.Add(2);
+        if (player.Strategy.ShouldTakePassedDice(state))
+        {
+            Log($"{player.Name} takes passed dice [{string.Join(", ", passed)}] with {passedScore}p");
+            return (passed, passedScore);
+        }
 
-		var fivesCount = hand.Count(x => x == 5);
-		score += fivesCount * 100;
-		hand.RemoveAll(x => x == 5);
-		for (var i = 0; i < fivesCount; i++) table.Add(5);
+        Log($"{player.Name} starts fresh (skips {passedScore}p)");
+        return (new Dice(0), 0);
+    }
 
-		return score;
-	}
+    private GameState BuildGameState(
+        Player currentPlayer, int roundScore, Dice hand, Dice table, bool isLastInRound,
+        int inheritedScore = 0, int inheritedTableCount = 0)
+    {
+        var myIdx = _players.IndexOf(currentPlayer);
+        var myScore = currentPlayer.TotalScore.Value;
+        var allScores = _players.Select(p => p.TotalScore.Value).ToList();
+        var leaderScore = allScores.Max();
+        var opponentScores = allScores.Where((_, i) => i != myIdx).ToList();
 
-	private static bool ShouldStop() => Randomizer.Boolean();
+        return new GameState
+        {
+            RoundScore = roundScore,
+            HandDiceCount = hand.Count,
+            TableDiceCount = table.Count,
+            RollsThisTurn = _rollsThisTurn,
+            CurrentRound = _currentRound,
+            TotalRounds = TotalRounds,
+            IsLastPlayerInRound = isLastInRound,
+            MyTotalScore = myScore,
+            PlayerRank = allScores.Count(s => s > myScore) + 1,
+            PlayerCount = _players.Count,
+            LeaderScore = leaderScore,
+            AverageOpponentScore = opponentScores.Count > 0 ? (int)opponentScores.Average() : 0,
+            InheritedScore = inheritedScore,
+            InheritedHandDiceCount = 5 - inheritedTableCount
+        };
+    }
 
-	private static bool ShouldTakePassedDice() => Randomizer.Boolean();
+    // Moves all scoring dice from hand to table and returns the points gained.
+    // Ones only score if there are 3+ in the same roll and cannot be saved individually.
+    private static int KeepScoringDice(Dice hand, Dice table)
+    {
+        var score = 0;
 
-	private void PrintResults()
-	{
-		Console.WriteLine("\n========= GAME OVER =========");
-		var ranked = _players.OrderByDescending(p => p.TotalScore.Value).ToList();
-		for (var i = 0; i < ranked.Count; i++)
-			Console.WriteLine($"{i + 1}. {ranked[i].Name}: {ranked[i].TotalScore.Value}p");
-		Console.WriteLine($"\nVinnare: {ranked[0].Name}!");
-	}
+        var onesCount = hand.Count(x => x == 1);
+        if (onesCount >= 3)
+        {
+            score += 1000;
+            hand.RemoveAll(x => x == 1);
+            for (var i = 0; i < onesCount; i++) table.Add(1);
+        }
+
+        var twosCount = hand.Count(x => x == 2);
+        score += twosCount * 50;
+        hand.RemoveAll(x => x == 2);
+        for (var i = 0; i < twosCount; i++) table.Add(2);
+
+        var fivesCount = hand.Count(x => x == 5);
+        score += fivesCount * 100;
+        hand.RemoveAll(x => x == 5);
+        for (var i = 0; i < fivesCount; i++) table.Add(5);
+
+        return score;
+    }
+
+    private void Log(string message)
+    {
+        if (_verbose) Console.WriteLine(message);
+    }
 }
