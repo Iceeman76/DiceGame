@@ -90,6 +90,12 @@ public sealed class Game
             var selectionState = BuildGameState(player, roundScore, hand, table, isLastInRound);
             var selection = player.Strategy.SelectDiceToKeep(hand, selectionState);
 
+            if (selection.Total == 0)
+            {
+                Log($"{player.Name} busted! Round score lost.");
+                return;
+            }
+
             roundScore += KeepScoringDice(hand, table, selection);
 
             Log($"Kept:   [{string.Join(", ", table)}]  Round score: {roundScore}p");
@@ -153,13 +159,12 @@ public sealed class Game
     private static int KeepScoringDice(Dice hand, Dice table, DiceSelection selection)
     {
         var score = 0;
-        var onesCount = hand.Count(x => x == 1);
 
-        if (onesCount >= 3)
+        if (selection.Ones > 0)
         {
             score += 1000;
 
-            for (var i = 0; i < 3; i++)
+            for (var i = 0; i < selection.Ones; i++)
             {
                 hand.Remove(1);
                 table.Add(1);

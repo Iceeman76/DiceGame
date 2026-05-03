@@ -38,6 +38,9 @@ public sealed class ThresholdStrategy(string name) : IPlayerStrategy
     /// <summary>Maximum number of fives to keep per roll. Keeping fewer leaves more dice in hand for the next roll. Use <see cref="int.MaxValue"/> to keep all.</summary>
     public int MaxFivesToKeepPerRoll { get; init; } = int.MaxValue;
 
+    /// <summary>When false, the player ignores triple ones and does not save them.</summary>
+    public bool SaveTripleOnes { get; init; } = true;
+
     /// <summary>Minimum inherited score required to take the passed dice. Use <see cref="int.MaxValue"/> to never take inherited dice.</summary>
     public int TakeInheritanceMinScore { get; init; } = int.MaxValue;
 
@@ -90,20 +93,15 @@ public sealed class ThresholdStrategy(string name) : IPlayerStrategy
         return state.InheritedScore >= TakeInheritanceMinScore;
     }
 
-    /// <summary>Returns how many twos and fives to save from the current hand. Always keeps at least one die when scoring dice are available.</summary>
+    /// <summary>Returns how many ones, twos, and fives to save from the current hand.</summary>
     public DiceSelection SelectDiceToKeep(Dice hand, GameState state)
     {
+        var onesInHand = hand.Count(x => x == 1);
         var availableTwos = hand.Count(x => x == 2);
         var availableFives = hand.Count(x => x == 5);
+        var ones = SaveTripleOnes && onesInHand >= 3 ? 3 : 0;
         var twos = Math.Min(availableTwos, MaxTwosToKeepPerRoll);
         var fives = Math.Min(availableFives, MaxFivesToKeepPerRoll);
-
-        if (twos == 0 && fives == 0)
-        {
-            twos = availableTwos > 0 ? 1 : 0;
-            fives = twos == 0 && availableFives > 0 ? 1 : 0;
-        }
-
-        return new DiceSelection(twos, fives);
+        return new DiceSelection(ones, twos, fives);
     }
 }

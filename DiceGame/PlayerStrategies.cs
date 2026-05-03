@@ -19,6 +19,14 @@ public static class PlayerStrategies
         TakeInheritanceMinHandDice = 1
     };
 
+    public static ThresholdStrategy Idiot() => new("Idiot")
+    {
+        StopThreshold = 250,
+        MaxFivesToKeepPerRoll = 0,
+        SaveTripleOnes = false,
+        TakeInheritanceMinScore = int.MaxValue
+    };
+
     public static ThresholdStrategy Adaptive() => new("Adaptiv")
     {
         StopThreshold = 350,
