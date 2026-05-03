@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DiceGame", "DiceGame\DiceGame.csproj", "{EAD6CD79-C9FC-472F-99F7-84A1C411A5C1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Simulator", "Simulator\Simulator.csproj", "{EC09CBC8-9BF9-4465-B447-A740C3AEFEBB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{EAD6CD79-C9FC-472F-99F7-84A1C411A5C1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EAD6CD79-C9FC-472F-99F7-84A1C411A5C1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EAD6CD79-C9FC-472F-99F7-84A1C411A5C1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EAD6CD79-C9FC-472F-99F7-84A1C411A5C1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EC09CBC8-9BF9-4465-B447-A740C3AEFEBB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EC09CBC8-9BF9-4465-B447-A740C3AEFEBB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EC09CBC8-9BF9-4465-B447-A740C3AEFEBB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EC09CBC8-9BF9-4465-B447-A740C3AEFEBB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

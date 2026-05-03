@@ -1,0 +1,11 @@
+﻿/.git/
+/.idea/
+bin/
+obj/
+*.user
+*.db
+*.Artifacts/
+/Admin.ConsoleUI/appsettings.json
+/ConsoleUI/appsettings.json
+/Integration.SvenskaSpel.Tests/appsettings.json
+*.received.*
