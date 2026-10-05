@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#101615" />
+    <meta
+      name="description"
+      content="Play ten rounds with friends on the same device and computer opponents with selectable strategies."
+    />
+    <base href="/" />
+    <title>Dice Game</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="css/app.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div class="loading-screen">
+        <span>⚄</span>
+        <h1>Dice Game</h1>
+        <p>Loading game…</p>
+        <progress
+          id="loading-progress"
+          max="100"
+          value="0"
+          aria-label="Loading game"
+        ></progress>
+      </div>
+    </div>
+    <div id="blazor-error-ui" role="alert">
+      The game encountered an error. <a href=".">Reload</a>
+    </div>
+    <script src="_framework/blazor.webassembly.js"></script>
+  </body>
+</html>

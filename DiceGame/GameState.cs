@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Immutable;
+using System.Linq;
+using DiceGame.Strategies;
 
 namespace DiceGame;
 
@@ -36,6 +39,10 @@ public sealed record GameState
 
     /// <summary>Total number of players in the game.</summary>
     public required int PlayerCount { get; init; }
+    public int PlayersRemainingInRound { get; init; }
+    public ImmutableArray<int> OpponentScores { get; init; } = [];
+    internal ImmutableArray<IPlayerStrategy> OpponentStrategies { get; init; } = [];
+    public int BestOpponentScore => OpponentScores.DefaultIfEmpty(LeaderScore).Max();
 
     /// <summary>Highest total score among all players.</summary>
     public required int LeaderScore { get; init; }
@@ -45,6 +52,10 @@ public sealed record GameState
 
     /// <summary>Points behind the leader. Zero if this player is leading.</summary>
     public int PointsBehindLeader => Math.Max(0, LeaderScore - MyTotalScore);
+
+    public int ProjectedTotalScore => MyTotalScore + RoundScore;
+    public int PointsBehindLeaderAfterBanking => Math.Max(0, LeaderScore - ProjectedTotalScore);
+    public bool IsLeadingAfterBanking => ProjectedTotalScore >= LeaderScore;
 
     /// <summary>True if this player is currently leading.</summary>
     public bool IsLeading => PlayerRank == 1;

@@ -1,0 +1,706 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JavaScript
+
+<PageTitle>Dice Game</PageTitle>
+
+<div class="app-shell">
+    <header class="masthead">
+        <a class="brand" href="./" aria-label="Dice Game home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="3" y="3" width="26" height="26" rx="5" fill="none" stroke="currentColor" stroke-width="2" /><g fill="currentColor"><circle cx="10" cy="10" r="2" /><circle cx="22" cy="10" r="2" /><circle cx="16" cy="16" r="2" /><circle cx="10" cy="22" r="2" /><circle cx="22" cy="22" r="2" /></g></svg></span>Dice Game</a>
+        <div class="header-controls">
+            <button class="turbo-switch" role="switch" aria-checked="@(turboEnabled ? "true" : "false")" aria-label="Turbo mode" @onclick="ToggleTurbo"><span class="switch-track"><span></span></span>Turbo</button>
+            <button class="icon-button" @onclick="ToggleSoundAsync" aria-label="@(soundEnabled ? "Mute sound" : "Enable sound")">@(soundEnabled ? "Sound on" : "Sound off")</button>
+        </div>
+    </header>
+
+    <main class="game-layout">
+        <section class="play-area">
+            <div class="page-heading"><h1>Game table</h1><span>5 dice · 10 rounds</span></div>
+            <div class="table-surround">
+                <div class="table-top">
+                    <div class="table-caption">
+                        <span>@(match is null ? "READY TO PLAY" : match.Phase == MatchPhase.Opening || awaitingGameStart ? "STARTING ORDER" : match.Phase == MatchPhase.Finished ? "FINAL RESULT" : $"ROUND {match.CurrentRound} / 10")</span>
+                        @if (match is { CurrentRound: InteractiveGame.TotalRounds } && match.Phase is not MatchPhase.Finished)
+                        {
+                            <span class="last-round-label" role="alert">Last round!</span>
+                        }
+                    </div>
+                    @if (match is null)
+                    {
+                        <div class="welcome-table">
+                            <div class="decorative-dice"><Die Value="5" Disabled="true" /><Die Value="2" Disabled="true" /><Die Value="1" Disabled="true" /></div>
+                            <h2>Set up a game</h2>
+                            <p>Choose how many people and computers will play, and a strategy for each computer.</p>
+                        </div>
+                    }
+                    else if (match.Phase == MatchPhase.Opening || awaitingGameStart)
+                    {
+                        <div class="opening-table">
+                            <p class="eyebrow light">OPENING ROLL @Math.Max(1, match.OpeningRound)</p>
+                            <h2>@(awaitingGameStart ? match.Message : "Who starts?")</h2>
+                            <p>Everyone rolls one die. Highest roll starts.<br />Only players tied for highest roll again.</p>
+                            <div class="opening-dice">
+                                @foreach (var player in match.Players)
+                                {
+                                    var contender = match.Phase == MatchPhase.Opening ? match.IsOpeningContender(player) : match.CurrentPlayer == player;
+                                    var openingValue = openingRollValues.GetValueOrDefault(player.Name, match.OpeningRolls.FirstOrDefault(roll => roll.PlayerName == player.Name)?.Value ?? 0);
+                                    <div class="opening-player @(contender ? "" : "eliminated")">
+                                        <Die Value="openingValue" Disabled="true" Rolling="@(rolling && match.IsOpeningContender(player))" />
+                                        <span>@player.Name</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+                    else if (match.Phase == MatchPhase.Finished)
+                    {
+                        <div class="welcome-table">
+                            <p class="eyebrow light">GAME OVER</p>
+                            <h2>@(match.Winners.Count == 1 ? $"{match.Winners[0].Name} wins" : "Shared victory")</h2>
+                            <p>@string.Join(" & ", match.Winners.Select(player => player.Name)) · @match.Winners[0].TotalScore.Value.ToString("N0") points</p>
+                            <button class="button primary" @onclick="ResetAsync">New game</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="active-table">
+                            <div class="turn-heading">
+                                <span class="avatar">@AvatarLabel(match.CurrentPlayer.Name)</span>
+                                <div>
+                                    <p class="eyebrow light">@(match.IsHumanTurn ? "HUMAN TURN" : "COMPUTER TURN")</p>
+                                    <h2>@match.CurrentPlayer.Name</h2>
+                                    <p class="lead-target">@LeadHint</p>
+                                </div>
+                                <div class="turn-score"><strong>@match.TurnScore.ToString("N0")</strong><span>turn points</span></div>
+                            </div>
+                            <div class="dice-hand @(match.Phase == MatchPhase.ChooseInheritance ? "inheritance-preview" : "")">
+                                @for (var index = 0; index < (match.Phase == MatchPhase.ChooseInheritance ? 5 : match.Hand.Count); index++)
+                                {
+                                    var dieIndex = index;
+                                    @if (match.Phase == MatchPhase.ChooseInheritance)
+                                    {
+                                        <Die Value="0" Disabled="true" Available="@(index < match.InheritedDiceCount)" Muted="@(index >= match.InheritedDiceCount)" />
+                                    }
+                                    else
+                                    {
+                                        var value = match.Hand[index];
+                                        <Die Value="value" Selected="selectedDice.Contains(index)" Disabled="@(busy || match.IsHumanTurn is false || match.Phase is not MatchPhase.SelectDice || IsScoringFace(value) is false)" Muted="@(match.Phase == MatchPhase.SelectDice && IsScoringFace(value) is false)" Rolling="rolling" OnClick="() => ToggleDie(dieIndex)" />
+                                    }
+                                }
+                            </div>
+                            @if (match.Phase == MatchPhase.ChooseInheritance)
+                            {
+                                <p class="table-hint inheritance-hint"><strong>@match.InheritedDiceCount @(match.InheritedDiceCount == 1 ? "die" : "dice") available to roll</strong><span>Take over @match.InheritedScore points, or start fresh.</span></p>
+                            }
+                            else
+                            {
+                                <p class="table-hint">@(match.Phase == MatchPhase.SelectDice && match.IsHumanTurn ? "Select scoring dice to keep." : match.IsHumanTurn ? match.CanBank ? "Bank your points, or roll again." : "Roll and keep scoring dice. Reach 250 points to bank." : "Opponent is playing.")</p>
+                            }
+                            <div class="kept-area">
+                                <span>KEPT DICE</span>
+                                <div class="kept-dice">
+                                    @foreach (var value in match.Phase == MatchPhase.ChooseInheritance ? match.InheritedTable : match.Table)
+                                    {
+                                        <Die Value="value" Disabled="true" />
+                                    }
+                                    @if ((match.Phase == MatchPhase.ChooseInheritance ? match.InheritedTable.Count : match.Table.Count) == 0)
+                                    {
+                                        <span class="empty-kept">None</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    <div class="table-footer"><span>2 = 50 pts</span><span>5 = 100 pts</span><span>1 + 1 + 1 = 1,000 pts</span><span>Bank from 250 pts</span></div>
+                </div>
+            </div>
+
+            @if (match is not null)
+            {
+                <div class="action-panel" aria-live="polite">
+                    <p>@match.Message</p>
+                    <div class="game-actions">
+                        @if (match.Phase == MatchPhase.Opening)
+                        {
+                            <button class="button primary" disabled="@busy" @onclick="OpeningAsync">@(busy ? "Rolling…" : match.OpeningRound == 0 ? "Roll for starting order" : "Roll tiebreaker")</button>
+                        }
+                        else if (awaitingGameStart)
+                        {
+                            <button class="button primary" disabled="@busy" @onclick="BeginGameAsync">Start game</button>
+                        }
+                        else if (match.IsHumanTurn && match.Phase is not MatchPhase.Finished)
+                        {
+                            @switch (match.Phase)
+                            {
+                                case MatchPhase.ChooseInheritance:
+                                    <button class="button primary" disabled="@busy" @onclick="() => InheritAsync(true)">Take over @match.InheritedScore pts</button>
+                                    <button class="button secondary" disabled="@busy" @onclick="() => InheritAsync(false)">Start fresh</button>
+                                    break;
+                                case MatchPhase.ReadyToRoll:
+                                    <button class="button primary" disabled="@busy" @onclick="RollAsync">@(busy ? "Rolling…" : "Roll dice")</button>
+                                    @if (match.CanBank)
+                                    {
+                                        <button class="button secondary" disabled="@busy" @onclick="BankAsync">Bank @match.TurnScore pts</button>
+                                    }
+                                    break;
+                                case MatchPhase.SelectDice:
+                                    <button class="button primary" disabled="@(busy || match.IsValidSelection(Selection) is false)" @onclick="KeepAsync">Keep selected · @SelectedScore pts</button>
+                                    <button class="button secondary" disabled="@busy" @onclick="SelectAll">Select all scoring dice</button>
+                                    break;
+                                case MatchPhase.TurnEnded:
+                                    @if (busy)
+                                    {
+                                        <span class="thinking"><span></span> Next player…</span>
+                                    }
+                                    else
+                                    {
+                                        <button class="button primary" @onclick="NextAsync">Next player</button>
+                                    }
+                                    break;
+                            }
+                        }
+                        else if (match.Phase is not MatchPhase.Finished)
+                        {
+                            <span class="thinking"><span></span> @match.CurrentPlayer.Name is playing</span>
+                        }
+                    </div>
+                </div>
+            }
+
+            <div class="below-table">
+                <div class="rules-card">
+                    <h3>Rules</h3>
+                    <p>Keep scoring dice and roll the rest. A roll without scoring dice ends your turn and loses its unbanked points. Keep all five dice to roll a fresh set. Highest total after 10 rounds wins.</p>
+                    <details>
+                        <summary>Scoring and passed dice</summary>
+                        <p>Scoring applies to each roll. Three ones must be kept together for 1,000 points; individual ones score nothing. Each two scores 50 and each five scores 100. You choose which scoring dice to keep. After a player banks, the next player may take over their points and remaining dice, or start fresh. You must roll and keep scoring dice before banking inherited points. Banking advances to the next player automatically. Tied final scores share the victory.</p>
+                    </details>
+                </div>
+            </div>
+        </section>
+
+        <aside class="sidebar">
+            <section class="scoreboard" aria-label="Scoreboard">
+                <div class="section-title"><h2>Scoreboard</h2></div>
+                <p class="sidebar-subtitle">@(match is null ? "Players" : match.Phase == MatchPhase.Finished ? "Final scores" : match.Phase == MatchPhase.Opening ? "Starting order pending" : awaitingGameStart ? $"{match.CurrentPlayer.Name} starts the game" : $"Round {match.CurrentRound} of 10")</p>
+                <div class="score-list">
+                    @if (match is null)
+                    {
+                        @foreach (var humanName in HumanNames)
+                        {
+                            <div class="score-row"><span class="score-avatar human">@AvatarLabel(humanName)</span><div><strong>@humanName</strong><small>Human</small></div><strong class="score-value">0 <small>pts</small></strong></div>
+                        }
+                        @foreach (var seat in ActiveSeats)
+                        {
+                            <div class="score-row"><span class="score-avatar">@AvatarLabel(seat.Name)</span><div><strong>@seat.Name</strong><small>@StrategyLabel(seat.Strategy)</small></div><strong class="score-value">0 <small>pts</small></strong></div>
+                        }
+                    }
+                    else
+                    {
+                        @foreach (var player in match.Players)
+                        {
+                            var active = awaitingGameStart is false && match.Phase is not MatchPhase.Opening and not MatchPhase.Finished && match.CurrentPlayer == player;
+                            var leader = player.TotalScore.Value == match.LeaderScore && (match.LeaderScore > 0 || match.Phase == MatchPhase.Finished);
+                            <div class="score-row @(active ? "active" : "") @(leader ? "leader" : "")" aria-label="@(leader ? $"{player.Name}, leader" : player.Name)"><span class="score-avatar @(player.IsHuman ? "human" : "")">@AvatarLabel(player.Name)</span><div><strong>@player.Name</strong><small>@(player.IsHuman ? "Human" : StrategyLabel(player.Strategy.Name))</small></div><strong class="score-value">@player.TotalScore.Value.ToString("N0") <small>pts</small></strong></div>
+                        }
+                    }
+                </div>
+                <div class="scoreboard-footer"><span class="status-dot"></span> @(match?.Phase == MatchPhase.Finished ? "Game over" : "10 rounds · highest score wins")</div>
+            </section>
+
+            @if (match is null)
+            {
+                <section class="setup-card">
+                    <h2>Game setup</h2>
+                    <label for="player-count">Players <span>total</span></label>
+                    <select id="player-count" @bind="playerCount" @bind:after="ClampHumanPlayerCount">
+                        @for (var count = 2; count <= 6; count++)
+                        {
+                            <option value="@count">@count players</option>
+                        }
+                    </select>
+                    <label class="human-count-label" for="human-player-count">Human players <span>same device</span></label>
+                    <select id="human-player-count" @bind="humanPlayerCount">
+                        @for (var count = 0; count <= playerCount; count++)
+                        {
+                            <option value="@count">@(count == 0 ? "No humans — all computers" : $"{count} {(count == 1 ? "human player" : "human players")}")</option>
+                        }
+                    </select>
+                    <div class="human-settings" hidden="@(humanPlayerCount == 0)">
+                        @for (var index = 0; index < humanPlayerCount; index++)
+                        {
+                            var humanIndex = index;
+                            <div class="player-name-setting">
+                                <label for="@($"human-name-{index + 1}")">Player @(index + 1) <small>Human</small></label>
+                                <input id="@($"human-name-{index + 1}")" type="text" maxlength="24" @bind="humanNames[humanIndex]" @bind:after="SavePlayerNamesAsync" />
+                            </div>
+                        }
+                    </div>
+                    <div class="opponent-settings">
+                        @foreach (var seat in ActiveSeats)
+                        {
+                            <div class="opponent-setting">
+                                <div class="opponent-name">
+                                    <label for="@($"computer-name-{seat.Id}")">Computer name</label>
+                                    <input id="@($"computer-name-{seat.Id}")" type="text" maxlength="24" @bind="seat.Name" @bind:after="SavePlayerNamesAsync" />
+                                </div>
+                                <div class="opponent-strategy">
+                                    <label for="@($"strategy-{seat.Id}")">Strategy</label>
+                                    <select id="@($"strategy-{seat.Id}")" @bind="seat.Strategy">
+                                        @foreach (var strategy in strategies.Available)
+                                        {
+                                            <option value="@strategy.Name">@strategy.Name</option>
+                                        }
+                                    </select>
+                                </div>
+                                <p>@StrategyDescription(seat.Strategy)</p>
+                            </div>
+                        }
+                    </div>
+                    @if (NameValidationMessage is not null)
+                    {
+                        <p class="name-validation" role="alert">@NameValidationMessage</p>
+                    }
+                    <button class="button primary start-button" disabled="@(preferencesLoaded is false || NameValidationMessage is not null)" @onclick="StartAsync">Start game</button>
+                </section>
+            }
+            else
+            {
+                <section class="history-card">
+                    <div class="section-title"><h3>Game log</h3></div>
+                    <div id="game-history" class="history-list @(historyExpanded ? "expanded" : "")" tabindex="0" aria-label="Game log entries">
+                        @foreach (var entry in match.History.Take(historyExpanded ? match.History.Count : 6))
+                        {
+                            <p>@entry</p>
+                        }
+                        @if (match.History.Count == 0)
+                        {
+                            <p>Roll to determine who starts.</p>
+                        }
+                    </div>
+                    @if (match.History.Count > 6)
+                    {
+                        <div><button class="text-button" aria-expanded="@historyExpanded" aria-controls="game-history" @onclick="() => historyExpanded = historyExpanded is false">@(historyExpanded ? "Show fewer entries" : $"Show all {match.History.Count} entries")</button></div>
+                    }
+                    <button class="text-button" @onclick="() => confirmReset = true">Leave game</button>
+                    @if (confirmReset)
+                    {
+                        <div class="reset-confirmation">
+                            <p>End this game and return to setup?</p>
+                            <button class="button secondary" @onclick="ResetAsync">End game</button>
+                            <button class="text-button" @onclick="() => confirmReset = false">Keep playing</button>
+                        </div>
+                    }
+                </section>
+            }
+        </aside>
+    </main>
+</div>
+
+@code {
+    private readonly PlayerStrategies strategies = new();
+    private readonly string[] humanNames = Enumerable.Range(1, 6).Select(number => $"Player {number}").ToArray();
+    private readonly ComputerSeat[] seats = [new("Alma", "Passive"), new("Hugo", "Bold"), new("Elsa", "Adaptive"), new("Nils", "Adaptive"), new("Vera", "Bold"), new("Leo", "Passive")];
+    private readonly Dictionary<string, int> openingRollValues = [];
+    private readonly HashSet<int> selectedDice = [];
+    private readonly CancellationTokenSource lifetime = new();
+    private CancellationTokenSource matchLifetime = new();
+    private InteractiveGame? match;
+    private IJSObjectReference? audio;
+    private IJSObjectReference? preferences;
+    private bool preferencesLoaded;
+    private bool turboEnabled;
+    private int playerCount = 3;
+    private int humanPlayerCount = 1;
+    private bool soundEnabled = true;
+    private bool busy;
+    private bool rolling;
+    private bool confirmReset;
+    private bool awaitingGameStart;
+    private bool historyExpanded;
+    private bool lastRoundAnnounced;
+    private IEnumerable<string> HumanNames => humanNames.Take(humanPlayerCount);
+    private IEnumerable<ComputerSeat> ActiveSeats => seats.Take(playerCount - humanPlayerCount);
+    private string? LeadHint => match!.IsCurrentPlayerLeading ? null : match.AdditionalPointsToTakeLead > 0 ? $"{match.AdditionalPointsToTakeLead:N0} more turn points to take the lead" : match.CanBank ? "Bank to take the lead" : "Roll and keep scoring dice to take the lead";
+    private string? NameValidationMessage
+    {
+        get
+        {
+            var activeNames = HumanNames.Concat(ActiveSeats.Select(seat => seat.Name)).Select(name => name.Trim()).ToArray();
+
+            if (activeNames.Any(string.IsNullOrWhiteSpace))
+            {
+                return "Enter a name for every player.";
+            }
+
+            if (activeNames.Distinct(StringComparer.OrdinalIgnoreCase).Count() < playerCount)
+            {
+                return "Give each player a different name.";
+            }
+
+            return null;
+        }
+    }
+    private DiceSelection Selection => new(selectedDice.Count(index => match!.Hand[index] == 1), selectedDice.Count(index => match!.Hand[index] == 2), selectedDice.Count(index => match!.Hand[index] == 5));
+    private int SelectedScore => Selection.Score;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            audio = await JavaScript.InvokeAsync<IJSObjectReference>("import", "./js/dice-audio.js");
+            preferences = await JavaScript.InvokeAsync<IJSObjectReference>("import", "./js/player-preferences.js");
+            var savedNames = await preferences.InvokeAsync<PlayerNamePreferences?>("load");
+
+            if (savedNames is not null)
+            {
+                Array.Copy(savedNames.HumanNames, humanNames, Math.Min(savedNames.HumanNames.Length, humanNames.Length));
+
+                for (var index = 0; index < Math.Min(savedNames.ComputerNames.Length, seats.Length); index++)
+                {
+                    seats[index].Name = savedNames.ComputerNames[index];
+                }
+            }
+
+            preferencesLoaded = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StartAsync()
+    {
+        await SavePlayerNamesAsync();
+        var players = HumanNames.Select(name => new Player(name.Trim(), new PassiveStrategy(), isHuman: true)).ToList();
+        players.AddRange(ActiveSeats.Select(seat => new Player(seat.Name.Trim(), seat.CreateStrategy(strategies))));
+        match = new InteractiveGame(players);
+        await EnableAudioAsync();
+    }
+
+    private async Task OpeningAsync()
+    {
+        var activeMatch = match!;
+        CaptureOpeningRolls(activeMatch);
+        await AnimateRollAsync(() =>
+        {
+            activeMatch.RollOpening();
+            CaptureOpeningRolls(activeMatch);
+            awaitingGameStart = activeMatch.Phase is not MatchPhase.Opening;
+        });
+    }
+
+    private async Task BeginGameAsync()
+    {
+        awaitingGameStart = false;
+        await RunComputersAsync();
+    }
+
+    private async Task RollAsync()
+    {
+        var activeMatch = match!;
+        await AnimateRollAsync(activeMatch.Roll);
+
+        if (ReferenceEquals(match, activeMatch))
+        {
+            SelectAll();
+        }
+    }
+
+    private async Task AnimateRollAsync(Action action)
+    {
+        var token = matchLifetime.Token;
+        busy = true;
+        rolling = true;
+        selectedDice.Clear();
+        StateHasChanged();
+
+        try
+        {
+            await PlaySoundAsync("roll");
+            await Task.Delay(650, token);
+            action();
+            await AnnounceTripleOnesAsync(match!);
+
+            if (match!.Phase == MatchPhase.TurnEnded)
+            {
+                await PlaySoundAsync("bust");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (token.IsCancellationRequested is false)
+            {
+                busy = false;
+                rolling = false;
+            }
+        }
+    }
+
+    private void ToggleDie(int index)
+    {
+        if (match!.Hand[index] == 1)
+        {
+            var ones = Enumerable.Range(0, match.Hand.Count).Where(dieIndex => match.Hand[dieIndex] == 1).Take(3).ToList();
+            var remove = selectedDice.Any(dieIndex => match.Hand[dieIndex] == 1);
+
+            foreach (var one in ones)
+            {
+                if (remove)
+                {
+                    selectedDice.Remove(one);
+                }
+                else
+                {
+                    selectedDice.Add(one);
+                }
+            }
+        }
+        else if (selectedDice.Add(index) is false)
+        {
+            selectedDice.Remove(index);
+        }
+    }
+
+    private bool IsScoringFace(int face) => face is 2 or 5 || face == 1 && match!.Hand.Count(value => value == 1) >= 3;
+
+    private void SelectAll()
+    {
+        selectedDice.Clear();
+
+        if (match!.Phase is not MatchPhase.SelectDice)
+        {
+            return;
+        }
+
+        var selectedOnes = 0;
+
+        for (var index = 0; index < match.Hand.Count; index++)
+        {
+            var face = match.Hand[index];
+
+            if (face is 2 or 5 || face == 1 && match.Hand.Count(value => value == 1) >= 3 && selectedOnes++ < 3)
+            {
+                selectedDice.Add(index);
+            }
+        }
+    }
+
+    private async Task KeepAsync()
+    {
+        match!.KeepDice(Selection);
+        selectedDice.Clear();
+        await PlaySoundAsync("keep");
+    }
+
+    private async Task BankAsync()
+    {
+        var activeMatch = match!;
+        var token = matchLifetime.Token;
+        activeMatch.Bank();
+        busy = true;
+        StateHasChanged();
+
+        try
+        {
+            await PlaySoundAsync("bank");
+            await Task.Delay(1400, token);
+            activeMatch.NextTurn();
+            selectedDice.Clear();
+            busy = false;
+            await RunComputersAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(match, activeMatch))
+            {
+                busy = false;
+            }
+        }
+    }
+
+    private async Task InheritAsync(bool accept)
+    {
+        match!.ChooseInheritance(accept);
+        await PlaySoundAsync("keep");
+    }
+
+    private async Task NextAsync()
+    {
+        match!.NextTurn();
+        selectedDice.Clear();
+        await RunComputersAsync();
+    }
+
+    private async Task RunComputersAsync()
+    {
+        var activeMatch = match!;
+        var token = matchLifetime.Token;
+
+        try
+        {
+            await AnnounceLastRoundAsync(activeMatch, token);
+
+            while (activeMatch.IsHumanTurn is false && activeMatch.Phase is not MatchPhase.Opening and not MatchPhase.Finished)
+            {
+                StateHasChanged();
+                await Task.Delay(turboEnabled ? 75 : activeMatch.Phase == MatchPhase.TurnEnded ? 1400 : 850, token);
+
+                if (activeMatch.ComputerWillRoll)
+                {
+                    rolling = true;
+                    StateHasChanged();
+                    await PlaySoundAsync("roll");
+                    await Task.Delay(turboEnabled ? 100 : 650, token);
+                    rolling = false;
+                }
+
+                activeMatch.PlayComputerStep();
+                await AnnounceTripleOnesAsync(activeMatch);
+                await AnnounceLastRoundAsync(activeMatch, token);
+
+                if (activeMatch.Phase == MatchPhase.TurnEnded)
+                {
+                    await PlaySoundAsync(activeMatch.TurnScore == 0 ? "bust" : "bank");
+                }
+            }
+
+            if (activeMatch.Phase == MatchPhase.Finished)
+            {
+                await PlaySoundAsync("bank");
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(match, activeMatch))
+            {
+                rolling = false;
+            }
+        }
+    }
+
+    private async Task ResetAsync()
+    {
+        await matchLifetime.CancelAsync();
+        matchLifetime.Dispose();
+        matchLifetime = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        match = null;
+        selectedDice.Clear();
+        busy = false;
+        rolling = false;
+        confirmReset = false;
+        awaitingGameStart = false;
+        historyExpanded = false;
+        lastRoundAnnounced = false;
+        openingRollValues.Clear();
+
+        if (audio is not null)
+        {
+            await audio.InvokeVoidAsync("stop");
+        }
+    }
+
+    private async Task EnableAudioAsync()
+    {
+        if (audio is not null && soundEnabled)
+        {
+            await audio.InvokeVoidAsync("enable");
+        }
+    }
+
+    private async Task ToggleSoundAsync()
+    {
+        soundEnabled = soundEnabled is false;
+        await EnableAudioAsync();
+
+        if (audio is not null)
+        {
+            await audio.InvokeVoidAsync("setMuted", soundEnabled is false);
+        }
+    }
+
+    private async Task PlaySoundAsync(string sound)
+    {
+        if (audio is not null && soundEnabled)
+        {
+            await audio.InvokeVoidAsync("play", sound);
+        }
+    }
+
+    private async Task AnnounceTripleOnesAsync(InteractiveGame activeMatch)
+    {
+        if (activeMatch.Phase == MatchPhase.SelectDice && activeMatch.Hand.Count(face => face == 1) >= 3)
+        {
+            await PlaySoundAsync("three-ones");
+        }
+    }
+
+    private void ClampHumanPlayerCount() => humanPlayerCount = Math.Min(humanPlayerCount, playerCount);
+
+    private void CaptureOpeningRolls(InteractiveGame activeMatch)
+    {
+        foreach (var roll in activeMatch.OpeningRolls)
+        {
+            openingRollValues[roll.PlayerName] = roll.Value;
+        }
+    }
+
+    private void ToggleTurbo() => turboEnabled = turboEnabled is false;
+
+    private async Task SavePlayerNamesAsync()
+    {
+        if (preferences is not null && NameValidationMessage is null)
+        {
+            await preferences.InvokeVoidAsync("save", new PlayerNamePreferences { HumanNames = humanNames.Select(name => name.Trim()).ToArray(), ComputerNames = seats.Select(seat => seat.Name.Trim()).ToArray() });
+        }
+    }
+
+    private static string AvatarLabel(string name) => name.StartsWith("Player ", StringComparison.Ordinal) ? name[7..] : name[..Math.Min(1, name.Length)];
+    private static string StrategyLabel(string strategy) => strategy;
+    private string StrategyDescription(string strategy) => strategies.Get(strategy).Description;
+
+    private async Task AnnounceLastRoundAsync(InteractiveGame activeMatch, CancellationToken token)
+    {
+        if (activeMatch.CurrentRound is not InteractiveGame.TotalRounds || lastRoundAnnounced || activeMatch.Phase == MatchPhase.Finished)
+        {
+            return;
+        }
+
+        lastRoundAnnounced = true;
+        busy = true;
+        StateHasChanged();
+
+        try
+        {
+            await PlaySoundAsync("last-round");
+            await Task.Delay(1500, token);
+        }
+        finally
+        {
+            if (ReferenceEquals(match, activeMatch))
+            {
+                busy = false;
+            }
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await lifetime.CancelAsync();
+        await matchLifetime.CancelAsync();
+        matchLifetime.Dispose();
+        lifetime.Dispose();
+
+        if (audio is not null)
+        {
+            await audio.InvokeVoidAsync("dispose");
+            await audio.DisposeAsync();
+        }
+    }
+}

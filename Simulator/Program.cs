@@ -1,14 +1,16 @@
+using DiceGame.Strategies;
 using System;
 using System.Linq;
+using System.Collections.Immutable;
 using DiceGame;
 
 const int simulations = 25_000;
 
 Simulate("Strategi-jämförelse", simulations,
 [
-    PlayerStrategies.Passive(),
-    PlayerStrategies.Bold(),
-    PlayerStrategies.Adaptive()
+    new PassiveStrategy(),
+    new BoldStrategy(),
+    new AdaptiveStrategy()
 ]);
 
 Simulate("Chansa? (annars identisk strategi)", simulations,
@@ -20,10 +22,10 @@ Simulate("Chansa? (annars identisk strategi)", simulations,
 
 return;
 
-static ThresholdStrategy MakeAdaptive(string name, int minDice) => PlayerStrategies.Adaptive() with
+static AdaptiveStrategy MakeAdaptive(string name, int minDice) => new AdaptiveStrategy() with
 {
     Name = name,
-    MinInheritedHandDiceToRoll = minDice
+    StopThresholdByDiceCount = Enumerable.Range(1, minDice - 1).ToImmutableDictionary(diceCount => diceCount, diceCount => 250)
 };
 
 static void Simulate(string title, int n, IPlayerStrategy[] strategies)

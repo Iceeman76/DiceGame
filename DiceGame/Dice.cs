@@ -22,17 +22,10 @@ public sealed class Dice : List<int>
 
     public int Score()
     {
-        var ones = this.Count(x => x == 1);
-        var twos = this.Count(x => x == 2);
-        var fives = this.Count(x => x == 5);
+        var ones = this.Count(face => face == 1);
+        var twos = this.Count(face => face == 2);
+        var fives = this.Count(face => face == 5);
 
-        var score = twos * 50 + fives * 100;
-
-        if (ones >= 3)
-        {
-            score += 1000;
-        }
-
-        return score;
+        return new DiceSelection(ones >= 3 ? 3 : 0, twos, fives).Score;
     }
 }
