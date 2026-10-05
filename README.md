@@ -53,7 +53,7 @@ dotnet run --project Simulator
 dotnet run --project DiceGame.Web
 ```
 
-Open http://localhost:5180. Select 2–6 total players and 0–6 humans. Humans share the same device and are named Player 1, Player 2, and so on. The remaining seats are computers with selectable Passive, Bold, or Adaptive strategies; all-human and all-computer games are supported. The active player's name identifies whose turn it is. The interface is in English, with a dark game table, animated dice, a sticky scoreboard on desktop and mobile, and locally bundled CC0 sound recordings by [Kenney](https://opengameart.org/content/54-casino-sound-effects-cards-dice-chips). Sound starts after interaction and can be muted.
+Open http://localhost:5180. Select 2–6 total players and 0–6 humans. Humans share the same device and are named Player 1, Player 2, and so on. The remaining seats are computers with selectable Passive, Bold, Adaptive, or Expectimax strategies; all-human and all-computer games are supported. The active player's name identifies whose turn it is. The interface is in English, with a dark game table, animated dice, a sticky scoreboard on desktop and mobile, and locally bundled CC0 sound recordings by [Kenney](https://opengameart.org/content/54-casino-sound-effects-cards-dice-chips). Sound starts after interaction and can be muted.
 
 Edit human and computer names in setup. Names are saved locally in the browser and restored between games and sessions. Names must be nonempty and unique among active players. The Turbo switch in the header speeds up computer decisions, rolls, and turn transitions and can be changed during a match.
 
@@ -72,9 +72,10 @@ dotnet publish DiceGame.Web -c Release
 
 The published `DiceGame.Web/bin/Release/net10.0/publish/wwwroot` directory can be served by a static web host. No backend or account is required. Sound attribution is included in `DiceGame.Web/wwwroot/audio/CREDITS.md`.
 
-The simulator runs two scenarios with 25,000 games each:
+The simulator runs five scenarios with 25,000 games each, using seed `20261005`, shuffled seating, and fractional win credit for tied winners:
 
-- **Strategy Comparison** — Passive vs. Bold vs. Adaptive
+- **Strategy Comparison** — Passive vs. Bold vs. Adaptive vs. Expectimax
+- **Head-to-head comparisons** — Expectimax against each of the three existing strategies
 - **Risk Analysis** — How the minimum-dice-to-roll threshold affects win rates
 
 ## Strategies
@@ -90,6 +91,15 @@ The last-round voice and sound cue are reduced to 60% of their previous volume: 
 | Passive | 250 | Banks early, never takes inherited dice |
 | Bold | 600 | Keeps rolling, always takes inherited dice |
 | Adaptive | 350 (base) | Uses standings after banking; stops at 250 with one die or 300 with two dice |
+| Expectimax | Calculated per position | Maximizes expected turn points using all future rolls and scoring subsets; maximizes victory share on the match's final turn |
+
+### Expectimax
+
+`new ExpectimaxStrategy()` implements `IPlayerStrategy` directly and is automatically available in the web strategy selector. Its precomputed dynamic programming policy enumerates exact roll probabilities, every legal scoring subset, the 250-point banking minimum, busts, and hot dice. Inheritance is compared with starting fresh and includes the mandatory roll before banking. It can leave scoring dice unkept when the extra dice improve expected future points.
+
+The score policy has a calculated banking boundary: above the largest expected roll score divided by the smallest bust probability, even an optimal continuation cannot justify risking the accumulated points. This gives a finite table without an arbitrary score cutoff. On the last player's final turn, a separate cached policy optimizes victory share, including ties and retaining an existing lead after a bust. Earlier players in the final round continue chasing if banking would still leave them behind.
+
+In the seeded 25,000-game comparisons, Expectimax earns 55.47% of victory share against Adaptive, 68.12% against Passive, and 74.94% against Bold. In the four-strategy comparison it earns 40.02%, ahead of Adaptive at 31.50%, Passive at 14.72%, and Bold at 13.76%. These results support it as the strongest default among the current strategies, but do not prove optimal match play: outside the final turn, it optimizes its own turn score rather than modeling opponents' future turns or the value of the position it passes.
 
 ### Key `ThresholdStrategy` Properties
 

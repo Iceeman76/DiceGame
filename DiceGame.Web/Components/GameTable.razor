@@ -19,7 +19,7 @@
                 <div class="table-top">
                     <div class="table-caption">
                         <span>@(match is null ? "READY TO PLAY" : match.Phase == MatchPhase.Opening || awaitingGameStart ? "STARTING ORDER" : match.Phase == MatchPhase.Finished ? "FINAL RESULT" : $"ROUND {match.CurrentRound} / 10")</span>
-                        @if (match is { CurrentRound: InteractiveGame.TotalRounds } && match.Phase is not MatchPhase.Finished)
+                        @if (match is { CurrentRound: InteractiveGame.TotalRounds, Phase: not MatchPhase.Finished })
                         {
                             <span class="last-round-label" role="alert">Last round!</span>
                         }

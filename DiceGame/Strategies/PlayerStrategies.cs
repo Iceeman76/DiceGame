@@ -13,7 +13,7 @@ public sealed class PlayerStrategies
     [UnconditionalSuppressMessage("Trimming", "IL2072", Justification = "Public strategy constructors are preserved by the application trimming configuration.")]
     public PlayerStrategies(params Assembly[] additionalAssemblies)
     {
-        Available = additionalAssemblies.Prepend(typeof(IPlayerStrategy).Assembly).Distinct().SelectMany(assembly => assembly.GetTypes()).Where(type => type.IsClass && type.IsAbstract is false && type.ContainsGenericParameters is false && typeof(IPlayerStrategy).IsAssignableFrom(type) && type.GetConstructor(Type.EmptyTypes) is not null).Select(type => (IPlayerStrategy)Activator.CreateInstance(type)!).OrderBy(strategy => strategy.Name).ToList().AsReadOnly();
+        Available = additionalAssemblies.Prepend(typeof(IPlayerStrategy).Assembly).Distinct().SelectMany(assembly => assembly.GetTypes()).Where(type => type is { IsClass: true, IsAbstract: false, ContainsGenericParameters: false } && typeof(IPlayerStrategy).IsAssignableFrom(type) && type.GetConstructor(Type.EmptyTypes) is not null).Select(type => (IPlayerStrategy)Activator.CreateInstance(type)!).OrderBy(strategy => strategy.Name).ToList().AsReadOnly();
     }
 
     public IReadOnlyList<IPlayerStrategy> Available { get; }

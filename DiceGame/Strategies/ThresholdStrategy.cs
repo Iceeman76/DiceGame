@@ -35,7 +35,7 @@ public abstract record ThresholdStrategy : IPlayerStrategy
 
     public bool ShouldStop(GameState state)
     {
-        if (SecureWinOnFinalTurn && state.RoundsLeft == 0 && state.IsLastPlayerInRound && state.ProjectedTotalScore > state.LeaderScore)
+        if (SecureWinOnFinalTurn && state is { RoundsLeft: 0, IsLastPlayerInRound: true } && state.ProjectedTotalScore > state.LeaderScore)
         {
             return true;
         }
@@ -117,7 +117,7 @@ public abstract record ThresholdStrategy : IPlayerStrategy
     {
         var selection = SelectDiceByLimits(hand, state);
 
-        if (SimulationBudget <= 0 || selection.Total == 0 || SecureWinOnFinalTurn && state.RoundsLeft == 0 && state.IsLastPlayerInRound && state.RoundScore + selection.Score >= InteractiveGame.MinimumBankScore && state.ProjectedTotalScore + selection.Score > state.LeaderScore)
+        if (SimulationBudget <= 0 || selection.Total == 0 || SecureWinOnFinalTurn && state is { RoundsLeft: 0, IsLastPlayerInRound: true } && state.RoundScore + selection.Score >= InteractiveGame.MinimumBankScore && state.ProjectedTotalScore + selection.Score > state.LeaderScore)
         {
             return selection;
         }
@@ -133,7 +133,7 @@ public abstract record ThresholdStrategy : IPlayerStrategy
         var allScoringOnes = onesInHand >= 3 ? 3 : 0;
         var allScoringPoints = hand.Score();
 
-        if (SecureWinOnFinalTurn && state.RoundsLeft == 0 && state.IsLastPlayerInRound && state.RoundScore + allScoringPoints >= InteractiveGame.MinimumBankScore && state.ProjectedTotalScore + allScoringPoints > state.LeaderScore)
+        if (SecureWinOnFinalTurn && state is { RoundsLeft: 0, IsLastPlayerInRound: true } && state.RoundScore + allScoringPoints >= InteractiveGame.MinimumBankScore && state.ProjectedTotalScore + allScoringPoints > state.LeaderScore)
         {
             return new DiceSelection(allScoringOnes, availableTwos, availableFives);
         }

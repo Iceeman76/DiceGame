@@ -1,66 +1,60 @@
-using DiceGame.Strategies;
 using System;
-using System.Linq;
 using System.Collections.Immutable;
+using System.Linq;
 using DiceGame;
+using DiceGame.Strategies;
 
 const int simulations = 25_000;
 
-Simulate("Strategi-jämförelse", simulations,
-[
-    new PassiveStrategy(),
-    new BoldStrategy(),
-    new AdaptiveStrategy()
-]);
+Simulate("Strategy comparison", simulations, [new PassiveStrategy(), new BoldStrategy(), new AdaptiveStrategy(), new ExpectimaxStrategy()]);
 
-Simulate("Chansa? (annars identisk strategi)", simulations,
-[
-    MakeAdaptive("Slår alltid", minDice: 1),
-    MakeAdaptive("Stannar vid 1 tärning", minDice: 2),
-    MakeAdaptive("Stannar vid ≤2 tärningar", minDice: 3)
-]);
+foreach (var opponent in new IPlayerStrategy[] { new PassiveStrategy(), new BoldStrategy(), new AdaptiveStrategy() })
+{
+    Simulate($"Expectimax vs {opponent.Name}", simulations, [new ExpectimaxStrategy(), opponent]);
+}
 
-return;
+Simulate("Dice risk comparison", simulations, [MakeAdaptive("Always rolls", 1), MakeAdaptive("Stops with one die", 2), MakeAdaptive("Stops with at most two dice", 3)]);
 
-static AdaptiveStrategy MakeAdaptive(string name, int minDice) => new AdaptiveStrategy() with
+static AdaptiveStrategy MakeAdaptive(string name, int minimumDice) => new AdaptiveStrategy() with
 {
     Name = name,
-    StopThresholdByDiceCount = Enumerable.Range(1, minDice - 1).ToImmutableDictionary(diceCount => diceCount, diceCount => 250)
+    StopThresholdByDiceCount = Enumerable.Range(1, minimumDice - 1).ToImmutableDictionary(diceCount => diceCount, diceCount => 250)
 };
 
-static void Simulate(string title, int n, IPlayerStrategy[] strategies)
+static void Simulate(string title, int gameCount, IPlayerStrategy[] strategies)
 {
-    var wins = strategies.ToDictionary(s => s.Name, _ => 0);
-    var totalScores = strategies.ToDictionary(s => s.Name, _ => 0L);
-    var maxScores = strategies.ToDictionary(s => s.Name, _ => 0);
+    var random = new Random(20261005);
+    var wins = strategies.ToDictionary(strategy => strategy.Name, _ => 0d);
+    var totalScores = strategies.ToDictionary(strategy => strategy.Name, _ => 0L);
+    var maximumScores = strategies.ToDictionary(strategy => strategy.Name, _ => 0);
 
-    for (var i = 0; i < n; i++)
+    for (var gameIndex = 0; gameIndex < gameCount; gameIndex++)
     {
-        var players = strategies.Select(s => new Player(s.Name, s)).ToArray();
-        var result = new Game(players, verbose: false, randomizeOrder: true).Start();
+        var players = strategies.Select(strategy => new Player(strategy.Name, strategy)).ToArray();
+        random.Shuffle(players);
+        var result = new Game(players, verbose: false, rollDie: () => random.Next(1, 7)).Start();
+        var winners = result.Rankings.Where(player => player.Score == result.WinnerScore).ToArray();
 
-        wins[result.Winner]++;
-
-        foreach (var rank in result.Rankings)
+        foreach (var winner in winners)
         {
-            totalScores[rank.Name] += rank.Score;
+            wins[winner.Name] += 1d / winners.Length;
+        }
 
-            if (rank.Score > maxScores[rank.Name])
-            {
-                maxScores[rank.Name] = rank.Score;
-            }
+        foreach (var player in result.Rankings)
+        {
+            totalScores[player.Name] += player.Score;
+            maximumScores[player.Name] = Math.Max(maximumScores[player.Name], player.Score);
         }
     }
 
-    Console.WriteLine($"\n{title} ({n:N0} simuleringar):\n");
-    Console.WriteLine($"{"Strategi",-28} {"Vinster",8}  {"Vinstprocent",12}  {"Snitt",10}  {"Högsta",12}");
-    Console.WriteLine(new string('-', 80));
+    Console.WriteLine($"\n{title} ({gameCount:N0} games, seed 20261005):\n");
+    Console.WriteLine($"{"Strategy",-28} {"Win share",12} {"Average",12} {"Highest",12}");
+    Console.WriteLine(new string('-', 68));
 
     foreach (var strategy in strategies)
     {
-        var winPct = (double)wins[strategy.Name] / n * 100;
-        var avg = totalScores[strategy.Name] / n;
-
-        Console.WriteLine($"{strategy.Name,-28} {wins[strategy.Name],8}  {winPct,11:F1}%  {avg,9}p  {maxScores[strategy.Name],10}p");
+        var winPercentage = wins[strategy.Name] / gameCount * 100;
+        var averageScore = (double)totalScores[strategy.Name] / gameCount;
+        Console.WriteLine($"{strategy.Name,-28} {winPercentage,11:F2}% {averageScore,12:F1} {maximumScores[strategy.Name],12}");
     }
 }

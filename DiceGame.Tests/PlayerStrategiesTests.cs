@@ -11,10 +11,11 @@ public sealed class PlayerStrategiesTests
     {
         var strategies = new PlayerStrategies();
 
-        Assert.That(strategies.Available.Select(strategy => strategy.GetType()), Is.EquivalentTo(new[] { typeof(PassiveStrategy), typeof(BoldStrategy), typeof(AdaptiveStrategy) }));
+        Assert.That(strategies.Available.Select(strategy => strategy.GetType()), Is.EquivalentTo([typeof(PassiveStrategy), typeof(BoldStrategy), typeof(AdaptiveStrategy), typeof(ExpectimaxStrategy)]));
         Assert.That(strategies.Get("Passive"), Is.TypeOf<PassiveStrategy>());
         Assert.That(strategies.Get("Bold"), Is.TypeOf<BoldStrategy>());
         Assert.That(strategies.Get("Adaptive"), Is.TypeOf<AdaptiveStrategy>());
+        Assert.That(strategies.Get("Expectimax"), Is.TypeOf<ExpectimaxStrategy>());
     }
 
     [Test]
@@ -39,7 +40,7 @@ public sealed class PlayerStrategiesTests
         Assert.That(customizedStrategy.StopThreshold, Is.EqualTo(500));
     }
 
-    public sealed record AdditionalStrategy : ThresholdStrategy
+    private sealed record AdditionalStrategy : ThresholdStrategy
     {
         public AdditionalStrategy()
         {
