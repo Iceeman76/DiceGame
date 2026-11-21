@@ -9,13 +9,19 @@ internal static class DiceRollStatistics
     private static readonly IReadOnlyList<Outcome>[] outcomes = Enumerable.Range(0, 6).Select(BuildOutcomes).ToArray();
 
     internal static RollForecast Forecast(ThresholdStrategy strategy, GameState state)
+        => Forecast(state, hand => strategy.SelectDiceByLimits(hand, state));
+
+    internal static RollForecast Forecast(IPlayerStrategy strategy, GameState state)
+        => Forecast(state, hand => strategy.SelectDiceToKeep(hand, state));
+
+    private static RollForecast Forecast(GameState state, Func<Dice, DiceSelection> selectDice)
     {
         var bustProbability = 0d;
         var expectedNetGain = 0d;
 
         foreach (var outcome in outcomes[state.HandDiceCount])
         {
-            var selection = strategy.SelectDiceByLimits(outcome.Hand, state);
+            var selection = selectDice(outcome.Hand);
 
             if (selection.Score == 0)
             {

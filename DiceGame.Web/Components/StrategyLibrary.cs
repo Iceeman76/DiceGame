@@ -21,7 +21,8 @@ public sealed class StrategyLibrary
 
         while (Available.Any(existing => existing.Name.Equals(uniqueName, StringComparison.OrdinalIgnoreCase)))
         {
-            uniqueName = $"{name} ({suffix++})";
+            var ending = $" ({suffix++})";
+            uniqueName = name[..Math.Min(name.Length, 60 - ending.Length)] + ending;
         }
 
         var savedStrategy = strategy with { Name = uniqueName };

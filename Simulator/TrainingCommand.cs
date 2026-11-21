@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 using DiceGame.Training;
 
@@ -31,7 +33,7 @@ public static class TrainingCommand
             return 1;
         }
 
-        var options = new TrainingOptions();
+        var options = new TrainingOptions { StrategyFamily = "Hybrid", OpponentNames = ["Adaptive", "Expectimax"] };
         var output = "evolved-strategy.json";
 
         for (var index = 1; index < args.Length; index += 2)
@@ -45,16 +47,52 @@ public static class TrainingCommand
                 continue;
             }
 
-            if (option == "--strategy-family")
+            if (option == "--opponents")
             {
-                if (value is not ("threshold" or "expectimax"))
+                options = options with { OpponentNames = value == "none" ? [] : value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) };
+                continue;
+            }
+
+            if (option == "--opponent-file")
+            {
+                try
+                {
+                    var opponent = LoadOpponent(value, options);
+                    options = options with { CustomOpponents = [.. options.CustomOpponents, opponent] };
+                }
+                catch (Exception exception) when (exception is IOException or JsonException or InvalidOperationException or KeyNotFoundException)
+                {
+                    Console.WriteLine($"Could not load opponent: {exception.Message}");
+
+                    return 1;
+                }
+
+                continue;
+            }
+
+            if (option == "--generation-winners")
+            {
+                if (bool.TryParse(value, out var includeWinners) is false)
                 {
                     PrintUsage();
 
                     return 1;
                 }
 
-                options = options with { StrategyFamily = value == "expectimax" ? "Expectimax" : "Threshold" };
+                options = options with { IncludeGenerationWinners = includeWinners };
+                continue;
+            }
+
+            if (option == "--strategy-family")
+            {
+                if (value is not ("threshold" or "expectimax" or "hybrid"))
+                {
+                    PrintUsage();
+
+                    return 1;
+                }
+
+                options = options with { StrategyFamily = value switch { "expectimax" => "Expectimax", "hybrid" => "Hybrid", _ => "Threshold" } };
                 continue;
             }
 
@@ -106,9 +144,24 @@ public static class TrainingCommand
             return 1;
         }
 
+        options = options with { OpponentNames = [.. options.OpponentNames, .. options.CustomOpponents.Select(opponent => opponent.Name)] };
+        DiceGame.Strategies.IPlayerStrategy[] selectedOpponents;
+
+        try
+        {
+            selectedOpponents = GeneticOptimizer.ResolveOpponents(options);
+        }
+        catch (Exception exception) when (exception is ArgumentException or InvalidOperationException)
+        {
+            Console.WriteLine("Select at least one known opponent: Passive, Bold, Adaptive, Expectimax, or a loaded opponent file.");
+
+            return 1;
+        }
+
         Console.WriteLine($"Training {options.Population} candidates for {options.Generations} generations, seed {options.Seed}, mutation rate {options.MutationRate:P0} per gene.");
         Console.WriteLine(options.VaryPlayerCount ? $"Tables vary from 2 to {options.MaximumPlayers} players." : $"Tables have {options.MaximumPlayers} players.");
         Console.WriteLine($"Strategy family: {options.StrategyFamily}");
+        Console.WriteLine($"Opponents: {string.Join(", ", selectedOpponents.Select(opponent => opponent.Name))}; generation winners: {options.IncludeGenerationWinners}");
         var result = GeneticOptimizer.Train(options, progress => Console.WriteLine($"Generation {progress.Generation,3}: training {progress.Training.WinShare:P2}, validation {progress.Validation.WinShare:P2}"));
         var testSeed = unchecked(options.Seed ^ 0x617B2E43);
         Console.WriteLine("\nIndependent test using the same table-size settings. Win share ± approximate 95% margin.");
@@ -127,7 +180,7 @@ public static class TrainingCommand
     private static StrategyEvaluation EvaluateStrategy(string name, DiceGame.Strategies.IPlayerStrategy strategy, TrainingOptions options, int seed)
     {
         PlayerCountEvaluation[] byPlayerCount = [];
-        var evaluation = StrategyEvaluator.EvaluateAsync(strategy, GeneticOptimizer.Baselines, options.TestGames, seed, yieldToBrowser: false, reportMatchup: current => byPlayerCount = current.ByPlayerCount, minimumPlayers: options.VaryPlayerCount ? 2 : options.MaximumPlayers, maximumPlayers: options.MaximumPlayers).GetAwaiter().GetResult();
+        var evaluation = StrategyEvaluator.EvaluateAsync(strategy, GeneticOptimizer.ResolveOpponents(options), options.TestGames, seed, yieldToBrowser: false, reportMatchup: current => byPlayerCount = current.ByPlayerCount, minimumPlayers: options.VaryPlayerCount ? 2 : options.MaximumPlayers, maximumPlayers: options.MaximumPlayers).GetAwaiter().GetResult();
         PrintEvaluation(name, evaluation);
 
         foreach (var table in byPlayerCount)
@@ -138,7 +191,23 @@ public static class TrainingCommand
         return evaluation;
     }
 
-    private static void PrintUsage() => Console.WriteLine("Usage: dotnet run --project Simulator -c Release -- train [--strategy-family threshold|expectimax] [--population 40] [--generations 20] [--games 500] [--validation-games 2000] [--test-games 10000] [--seed 20261121] [--mutation-rate 0.2] [--players 5 | --max-players 6] [--output evolved-strategy.json]\n       dotnet run --project Simulator -c Release -- evaluate evolved-strategy.json\nUse --players for fixed tables, --max-players for tables varying from 2 to the maximum (default 6). Player counts must be 2–6. Mutation rate must be between 0 and 1. Population must be at least 2; other numbers must be positive.");
+    private static StrategyFile LoadOpponent(string path, TrainingOptions options)
+    {
+        var opponent = StrategyFile.FromJson(File.ReadAllText(path), Path.GetFileNameWithoutExtension(path));
+        var names = GeneticOptimizer.Baselines.Select(strategy => strategy.Name).Concat(options.CustomOpponents.Select(strategy => strategy.Name)).ToArray();
+        var uniqueName = opponent.Name;
+        var suffix = 2;
+
+        while (names.Contains(uniqueName, StringComparer.OrdinalIgnoreCase))
+        {
+            var ending = $" ({suffix++})";
+            uniqueName = opponent.Name[..Math.Min(opponent.Name.Length, 60 - ending.Length)] + ending;
+        }
+
+        return opponent with { Name = uniqueName };
+    }
+
+    private static void PrintUsage() => Console.WriteLine("Usage: dotnet run --project Simulator -c Release -- train [--strategy-family hybrid|threshold|expectimax] [--opponents Adaptive,Expectimax] [--opponent-file strategy.json] [--generation-winners true|false] [--population 40] [--generations 20] [--games 500] [--validation-games 2000] [--test-games 10000] [--seed 20261121] [--mutation-rate 0.2] [--players 5 | --max-players 6] [--output evolved-strategy.json]\n       dotnet run --project Simulator -c Release -- evaluate evolved-strategy.json\nNew training defaults to Hybrid against Adaptive and Expectimax. Opponent files may be repeated; use --opponents none for file-only opponents. Earlier generation winners are training-only and enabled by default. Player counts must be 2–6. Mutation rate must be between 0 and 1. Population must be at least 2; other numbers must be positive.");
 }
 
 public sealed record TrainingArtifact(TrainingResult Training, StrategyEvaluation EvolvedTest, StrategyEvaluation AdaptiveTest, StrategyEvaluation ExpectimaxTest);

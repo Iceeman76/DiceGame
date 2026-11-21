@@ -2,7 +2,7 @@
 
 A dice-rolling risk/reward game engine in C# with pluggable player strategies and a Monte Carlo simulator for evaluating them.
 
-<img src="docs/images/dice-game.png" alt="Dice Game with two human players and computer opponents using Passive and Adaptive strategies" width="50%" />
+<img src="docs/images/dice-game.png" alt="Dice Game's blue game table with two human players and computer opponents using Adaptive and Expectimax strategies" width="50%" />
 
 ## Game Rules
 
@@ -88,7 +88,11 @@ Evolution's **Table size** setting selects fixed tables of 2–6 players or vary
 
 Both run types display live progress, completed and total match counts, elapsed time, throughput, and an approximate remaining duration. Evolution reports baseline validation, the current generation and candidate, candidate win share and average score, and the best validated win share. Its progress includes all training and validation matches. Tournament standings update during the run and are labelled preliminary until all matches finish. Cancelling keeps the partial results visible without saving an unfinished strategy. Blank seed fields generate a random seed at the start, shown below the relevant form for replay.
 
-Evolution also shows the built-in opponents' live win shares, average scores, and appearance counts from the current evaluation's actual matches. These statistics reset for each candidate and validation phase. Every player using a strategy counts as a separate appearance, so a strategy can have multiple appearances in one match. Shared victories contribute fractional credit. Tournament results additionally report how often each strategy played last, how many of those games it won, and how many of those wins were shared. Last-seat wins include shared wins, counted once per game; the shared-win column identifies that subset. The summary totals show how often the last player won across all simulated games.
+Evolution also shows the selected opponents' live win shares, average scores, and appearance counts from the current evaluation's actual matches, including selected JSON-loaded strategies. These statistics reset for each candidate and validation phase. Every player using a strategy counts as a separate appearance, so a strategy can have multiple appearances in one match. Shared victories contribute fractional credit. Tournament results additionally report how often each strategy played last, how many of those games it won, and how many of those wins were shared. Last-seat wins include shared wins, counted once per game; the shared-win column identifies that subset. The summary totals show how often the last player won across all simulated games.
+
+Use **Evolution opponents** to choose which strategies candidates train against. This selection is independent of the tournament checkboxes. New browser and CLI runs select Adaptive and Expectimax by default; Passive and Bold can be enabled explicitly. JSON-loaded strategies are also available in the browser. Select at least one opponent; each opponent seat is sampled from that pool, so even one selected strategy can fill a 2–6 player table. Baseline and generation-winner validation use exactly the selected fixed pool. **Also train against previous generation winners** optionally adds the most recent eight winners during training only; it is enabled by default and can be disabled for a strictly fixed pool. The live comparison displays the explicitly selected opponents, and the run summary records whether generation winners were enabled.
+
+CLI examples are `train --opponents Adaptive,Expectimax --generation-winners false` and `train --opponents none --opponent-file champion.json`. Repeat `--opponent-file` to load several strategies. File opponents are added to the selected built-in pool, or used alone with `--opponents none`. Training artifacts embed `OpponentNames`, `CustomOpponents` with full gene snapshots, and `IncludeGenerationWinners`, so later `evaluate` calls use the saved opponent pool without needing the original files. Legacy serialized options without these fields retain the previous four built-in opponents and enabled generation archive.
 
 Load several strategy JSON files using the file picker on either the lab page or game setup. Imported strategies appear in tournament checkboxes and the computer strategy selectors on the game table. A completed training run adds its selected strategy automatically. Download its JSON using **Save JSON**. Loaded and trained strategies stay available while navigating within the app, and must be loaded again after a browser refresh. Duplicate names receive a numeric suffix so built-in and imported strategies remain distinct. Each import accepts up to 20 files of at most 1 MB each.
 
@@ -107,9 +111,9 @@ dotnet run --project Simulator -c Release -- train --population 12 --generations
 dotnet run --project Simulator -c Release -- evaluate evolved-strategy.json
 ```
 
-Training starts with the selected family's baseline strategy and random candidates. Each generation retains the best fifth (at least two when the population permits, while leaving at least one offspring slot), crosses their settings, and attempts to mutate each gene with the selected probability (20% by default). Set **Mutation rate (%)** from 0 to 100 in the lab, or pass `--mutation-rate 0.2` to the CLI using a fraction from 0 to 1. At 0%, crossover still combines parental genes; retained elite candidates are never mutated. Each mutation has a 15% chance of resampling the gene's allowed range; otherwise it adds a random integer from -3 to +3 and clamps to the bounds. A mutation can therefore leave the value unchanged. The CLI saves the mutation rate with the training options; older artifacts default to 20%. Opponents include Passive, Bold, Adaptive, Expectimax, and the most recent eight generation winners. Table sizes follow the selected fixed or varying setting, with shuffled seating and sampled opponents. Candidates within a generation use the same schedule and dice seeds; different decisions can still consume different numbers of dice rolls. The fitness is fractional victory share, with no reward for average score.
+Training starts with the selected family's baseline strategy and random candidates. Each generation retains the best fifth (at least two when the population permits, while leaving at least one offspring slot), crosses their settings, and attempts to mutate each gene with the selected probability (20% by default). Set **Mutation rate (%)** from 0 to 100 in the lab, or pass `--mutation-rate 0.2` to the CLI using a fraction from 0 to 1. At 0%, crossover still combines parental genes; retained elite candidates are never mutated. Each mutation has a 15% chance of resampling the gene's allowed range; otherwise it adds a random integer from -3 to +3 and clamps to the bounds. A mutation can therefore leave the value unchanged. The CLI saves the mutation rate with the training options; older artifacts default to 20%. The opponent pool is selected separately, with optional previous generation winners during training. Table sizes follow the selected fixed or varying setting, with shuffled seating and sampled opponents. Candidates within a generation use the same schedule and dice seeds; different decisions can still consume different numbers of dice rolls. The fitness is fractional victory share, with no reward for average score.
 
-Generation winners compete with the family's original baseline (Adaptive or Expectimax) on a fixed validation schedule against the four built-in opponents. The saved candidate has the highest validation share, so training can retain the baseline if no winner improves it. Validation is used for selection and can overfit; the final test uses a separate seed, never used for selection. Evolved, Adaptive, and Expectimax are tested on the same configured table schedule. Reported approximate 95% margins describe each strategy's sampled win share, not the uncertainty of the difference between strategies. Small runs do not establish superiority or global optimality.
+Generation winners compete with the family's original baseline (Adaptive or Expectimax) on a fixed validation schedule against the selected opponents. The saved candidate has the highest validation share, so training can retain the baseline if no winner improves it. Validation is used for selection and can overfit; the final test uses a separate seed, never used for selection. Evolved, Adaptive, and Expectimax are tested against that same selected pool and configured table schedule. Reported approximate 95% margins describe each strategy's sampled win share, not the uncertainty of the difference between strategies. Small runs do not establish superiority or global optimality.
 
 The console JSON artifact contains the seed, training options, selected genes, validation result, and independent test results. `evaluate` reloads the genes and uses another deterministic test seed; repeating that command repeats the same evaluation. To use either export format in C#, call `StrategyFile.FromJson(json, "Imported").Genes.CreateStrategy()`. `TrainingArtifact` remains in the Simulator project.
 
@@ -117,7 +121,7 @@ The Threshold family's 14 genes, in order, are: normal stopping score, stopping 
 
 ### Evolving Expectimax
 
-Select **Expectimax search** in the lab's **Strategy family** selector, or use `train --strategy-family expectimax` in the console. Threshold remains the default family for compatibility. Expectimax training starts with genes `[0, 0, 4, 0, 0, 0]`, which reproduce built-in Expectimax decisions exactly. The population can evolve these six integer genes:
+Select **Expectimax search** in the lab's **Strategy family** selector, or use `train --strategy-family expectimax` in the console. New browser and CLI training defaults to the broader Hybrid family; the separate Threshold and Expectimax families remain selectable. Expectimax training starts with genes `[0, 0, 4, 0, 0, 0]`, which reproduce built-in Expectimax decisions exactly. The population can evolve these six integer genes:
 
 | Gene | Range | Effective parameter |
 | --- | --- | --- |
@@ -132,7 +136,27 @@ The built-in and evolved strategies share the same exact roll probabilities, leg
 
 Match-win estimates multiply sigmoid comparisons with opponents' projected scores, using uncertainty `200 + 100 × sqrt(rounds left)`. Opponents still to act this round receive the selected expected-points forecast. Equal future-round mean forecasts cancel from score differences. These are heuristics for match context and inheritance, not full simulations of opponents' future choices or calibrated win probabilities. They give evolution additional decisions to explore but do not establish superiority over the built-in strategy. The extra position policies also make this family more expensive per match.
 
-Expectimax exports use file version 2 and `Genes.Family = "Expectimax"`; Threshold exports remain version 1. Files without a family remain Threshold files. Both families can be loaded, simulated, inspected, and used in ordinary matches. New console training artifacts record `StrategyFamily`; earlier options default to Threshold.
+Expectimax exports use file version 2 and `Genes.Family = "Expectimax"`; Threshold exports remain version 1. Files without a family remain Threshold files. Both families and the Hybrid family can be loaded, simulated, inspected, and used in ordinary matches. New console training artifacts record `StrategyFamily`; earlier serialized options without that setting retain the Threshold default.
+
+### Evolving hybrids
+
+**Hybrid: Expectimax + thresholds** is the default for new training in the lab and CLI. It puts both components in one genome so their settings can cross over between parents. The initial population contains a pure-Expectimax candidate, an Adaptive-style candidate, and random hybrids. Validation starts with pure Expectimax and retains it if no generation winner improves the sampled validation share. Select `--strategy-family hybrid` explicitly for scripts, or choose `threshold` or `expectimax` to constrain the search to either earlier family.
+
+Hybrid files use version 3, `Genes.Family = "Hybrid"`, and 25 integer genes:
+
+| Zero-based indexes | Meaning |
+| --- | --- |
+| 0–5 | The six Expectimax genes described above |
+| 6–19 | The fourteen Threshold genes described above |
+| 20 | Banking mode: 0 = Expectimax, 1 = Threshold, 2 = either component may bank, 3 = both must agree to bank |
+| 21 | Dice selection: 0 = Expectimax, 1 = Threshold keeping rules |
+| 22 | Inheritance mode: 0 = Expectimax, 1 = Threshold, 2 = both must accept, 3 = either may accept |
+| 23 | Maximum next-roll bust probability: gene / 20, from 0% to 100%; 100% disables the limit |
+| 24 | Minimum expected net point gain: 0 disables it; genes 1–41 map to `(gene - 21) × 25`, from -500 to +500 |
+
+Banking and inheritance risk limits use exact next-roll outcomes with the hybrid's selected dice-keeping rule. Banking still requires at least 250 points and a successful scoring roll, and final-round lead chasing retains priority. The last player's final turn always uses the exact Expectimax victory-share decisions for banking, keeping dice, and accepting inheritance, bypassing hybrid overrides and risk gates. Neutral Expectimax weights with final genes `[0, 0, 0, 20, 0]` reproduce built-in Expectimax; changing them to `[1, 1, 1, 20, 0]` selects Adaptive-style behavior with the shared final-turn safeguards.
+
+The Expectimax component evaluates its own continuation policy exactly. Threshold overrides can subsequently choose different actions, so the component's calculated values are guidance rather than exact values of the entire hybrid continuation. Actual training and validation play complete matches using the hybrid's real decisions. Winning match share remains the fitness objective, and an improvement is not guaranteed. The parameter inspector explains each decision source, all effective values, and threshold settings that are currently inactive.
 
 ### Inspecting strategy parameters
 
@@ -207,6 +231,29 @@ var optimizedStrategy = new AdaptiveStrategy() with
 ```
 
 `GameState.OpponentScores` is an immutable snapshot in seating order excluding the current player. `PlayersRemainingInRound` identifies how many opponents still have a turn this round. `BestOpponentScore` supports lead targets without comparing the player against their own banked score. Larger simulation budgets increase computation per decision and should be benchmarked against other strategies.
+
+## Simulation performance
+
+Silent automated matches use the same `InteractiveGame` rules with presentation disabled, avoiding history storage and dynamic turn messages. Opponent strategy snapshots are built once per seating order, while fresh score snapshots are assembled in one pass for each decision. Interactive matches keep their normal messages and history.
+
+Expectimax precomputes score transitions and bounded banking values, and stores its policy tables in flat arrays. Evolved policy caches use relative opponent margins and effective match weights; when match-win weight is zero, the same risk/passed-position policy can be reused independently of the standings. These optimizations preserve the decisions and random-number sequence.
+
+Run the reproducible benchmark with:
+
+```bash
+dotnet run --project Simulator -c Release -- benchmark
+```
+
+It uses four-player tables, shuffled seating, seed `20261121`, a warmup, and the median of three measured runs. Each workload prints a checksum over rankings and scores plus allocated bytes per game. On the development machine, comparing the preceding revision with the optimized engine gave:
+
+| Candidate workload | Matches | Before | After | Speedup |
+| --- | ---: | ---: | ---: | ---: |
+| Adaptive threshold | 3,000 | 362.7 ms | 142.5 ms | 2.5× |
+| Built-in Expectimax | 3,000 | 291.4 ms | 119.3 ms | 2.4× |
+| Evolved Expectimax with match estimates | 100 | 273.0 ms | 145.2 ms | 1.9× |
+| Evolved Expectimax with risk/passed-position weights only | 100 | 99.4 ms | 7.2 ms | 13.8× |
+
+All four result checksums were unchanged. Threshold allocations fell from 140,928 to 33,816 bytes per game. These are native desktop Release measurements, not browser timings; results depend on strategy weights, hardware, and workload. Regression tests additionally compare complete automated and interactive matches with presentation enabled and disabled.
 
 ## Architecture
 

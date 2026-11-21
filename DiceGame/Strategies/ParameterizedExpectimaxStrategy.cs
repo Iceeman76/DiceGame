@@ -76,33 +76,37 @@ public sealed record ParameterizedExpectimaxStrategy(ExpectimaxParameters Parame
 
     private ExpectimaxStrategy.TurnPolicy GetPolicy(GameState state)
     {
-        var key = new PolicyKey(Parameters, state.RoundsLeft, state.PlayerCount, state.PlayersRemainingInRound, state.MyTotalScore, state.BestOpponentScore, string.Join(',', state.OpponentScores));
+        var matchWeight = Parameters.MatchWeight(state);
+        var uncertainty = matchWeight == 0 ? 0 : 200 + 100 * Math.Sqrt(state.RoundsLeft);
+        var opponents = matchWeight == 0 ? [] : state.OpponentScores.IsEmpty ? Enumerable.Repeat(state.BestOpponentScore, state.PlayerCount - 1).ToArray() : state.OpponentScores.ToArray();
+
+        for (var index = 0; index < opponents.Length; index++)
+        {
+            opponents[index] += (index >= opponents.Length - state.PlayersRemainingInRound ? Parameters.ExpectedOpponentTurnPoints : 0) - state.MyTotalScore;
+        }
+
+        var key = new PolicyKey(Parameters, matchWeight, uncertainty, string.Join(',', opponents));
 
         if (policies.TryGetValue(key, out var cached))
         {
             return cached;
         }
 
-        var matchWeight = Parameters.MatchWeight(state);
         var maximumAdjustment = Math.Abs(Parameters.RiskAdjustment) + matchWeight + Parameters.PassedDicePenalty;
-        var opponents = state.OpponentScores.IsEmpty ? Enumerable.Repeat(state.BestOpponentScore, state.PlayerCount - 1).ToArray() : state.OpponentScores.ToArray();
-        var uncertainty = 200 + 100 * Math.Sqrt(state.RoundsLeft);
-        var myScore = state.MyTotalScore;
-        var playersRemaining = state.PlayersRemainingInRound;
-        var expectedOpponentPoints = Parameters.ExpectedOpponentTurnPoints;
         var riskAdjustment = Parameters.RiskAdjustment;
         var passedDicePenalty = Parameters.PassedDicePenalty;
         var matchValues = new Dictionary<int, double>();
         var utility = (int score, int diceCount) =>
         {
-            if (matchValues.TryGetValue(score, out var matchValue) is false)
+            var matchValue = 0d;
+
+            if (matchWeight is not 0 && matchValues.TryGetValue(score, out matchValue) is false)
             {
                 var winChance = 1d;
 
                 for (var index = 0; index < opponents.Length; index++)
                 {
-                    var opponentFuture = opponents[index] + (index >= opponents.Length - playersRemaining ? expectedOpponentPoints : 0);
-                    var margin = myScore + score - opponentFuture;
+                    var margin = score - opponents[index];
                     winChance *= 1 / (1 + Math.Exp(Math.Clamp(-margin / uncertainty, -40, 40)));
                 }
 
@@ -128,5 +132,5 @@ public sealed record ParameterizedExpectimaxStrategy(ExpectimaxParameters Parame
         return policy;
     }
 
-    private sealed record PolicyKey(ExpectimaxParameters Parameters, int RoundsLeft, int PlayerCount, int PlayersRemaining, int MyScore, int BestOpponentScore, string OpponentScores);
+    private sealed record PolicyKey(ExpectimaxParameters Parameters, double MatchWeight, double Uncertainty, string OpponentMargins);
 }

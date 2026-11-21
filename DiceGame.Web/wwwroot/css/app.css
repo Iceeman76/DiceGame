@@ -43,9 +43,9 @@
 .lab-card input:not([type=checkbox]), .strategy-files input { font: inherit; width: 100%; color: inherit; background: #080d17; border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
 .lab-card select { font: inherit; width: 100%; color: inherit; background: #080d17; border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
 .lab-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 16px 0 24px; }
-.strategy-choices { display: grid; gap: 12px; margin-bottom: 24px; }
-.strategy-choices label { flex-direction: row; align-items: center; }
-.strategy-choices input { width: 18px; height: 18px; accent-color: var(--accent); }
+.strategy-choices, .training-opponent-choices { display: grid; gap: 12px; margin-bottom: 24px; }
+.strategy-choices label, .training-opponent-choices label, .lab-card .generation-opponents { flex-direction: row; align-items: center; }
+.strategy-choices input, .training-opponent-choices input, .generation-opponents input { width: 18px; height: 18px; accent-color: var(--accent); }
 .saved-strategy { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .saved-strategy a, a.text-button { color: var(--accent); text-decoration: none; }
 .lab-table { overflow-x: auto; max-height: 360px; }

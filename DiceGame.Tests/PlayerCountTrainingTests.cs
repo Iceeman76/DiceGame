@@ -94,6 +94,6 @@ public sealed class PlayerCountTrainingTests
 
         Assert.That(legacy.VaryPlayerCount, Is.True);
         Assert.That(legacy.MaximumPlayers, Is.EqualTo(6));
-        Assert.That(restored, Is.EqualTo(original));
+        Assert.That(JsonSerializer.Serialize(restored), Is.EqualTo(JsonSerializer.Serialize(original)));
     }
 }

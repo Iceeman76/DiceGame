@@ -10,18 +10,22 @@ public sealed record StrategyGenes(ImmutableArray<int> Values)
     private static readonly int[] maximums = [30, 30, 40, 30, 40, 4, 30, 30, 40, 5, 1, 5, 5, 5];
     private static readonly int[] expectimaxMinimums = [-4, 0, 0, 0, 0, 0];
     private static readonly int[] expectimaxMaximums = [4, 4, 8, 4, 4, 4];
+    private static readonly int[] hybridMinimums = [.. expectimaxMinimums, .. minimums, 0, 0, 0, 0, 0];
+    private static readonly int[] hybridMaximums = [.. expectimaxMaximums, .. maximums, 3, 1, 3, 20, 41];
 
     public string Family { get; init; } = "Threshold";
-    private int[] Minimums => Family == "Expectimax" ? expectimaxMinimums : minimums;
-    private int[] Maximums => Family == "Expectimax" ? expectimaxMaximums : maximums;
+    private int[] Minimums => Family switch { "Expectimax" => expectimaxMinimums, "Hybrid" => hybridMinimums, _ => minimums };
+    private int[] Maximums => Family switch { "Expectimax" => expectimaxMaximums, "Hybrid" => hybridMaximums, _ => maximums };
 
     public static StrategyGenes Adaptive => new([7, 5, 11, 4, 14, 2, 5, 6, 5, 2, 1, 5, 5, 4]);
     public static StrategyGenes Expectimax => new([0, 0, 4, 0, 0, 0]) { Family = "Expectimax" };
-    public static StrategyGenes Baseline(string family) => family == "Expectimax" ? Expectimax : Adaptive;
+    public static StrategyGenes Hybrid => new([.. Expectimax.Values, .. Adaptive.Values, 0, 0, 0, 20, 0]) { Family = "Hybrid" };
+    public static StrategyGenes HybridAdaptive => new([.. Expectimax.Values, .. Adaptive.Values, 1, 1, 1, 20, 0]) { Family = "Hybrid" };
+    public static StrategyGenes Baseline(string family) => family switch { "Expectimax" => Expectimax, "Hybrid" => Hybrid, _ => Adaptive };
 
     public bool IsValid()
     {
-        if (Family is not ("Threshold" or "Expectimax") || Values.IsDefault || Values.Length.Equals(Minimums.Length) is false)
+        if (Family is not ("Threshold" or "Expectimax" or "Hybrid") || Values.IsDefault || Values.Length.Equals(Minimums.Length) is false)
         {
             return false;
         }
@@ -38,9 +42,18 @@ public sealed record StrategyGenes(ImmutableArray<int> Values)
     }
     public IPlayerStrategy CreateStrategy(string name = "Evolved")
     {
-        if (Family == "Expectimax")
+        if (Family is "Expectimax" or "Hybrid")
         {
             var parameters = new ExpectimaxParameters(Values[0] * 25, Values[1] * 25, Values[2] * 50, Values[3] / 4d, Values[4] / 4d, Values[5] * 10);
+
+            if (Family == "Hybrid")
+            {
+                var thresholdGenes = new StrategyGenes(Values.Slice(6, 14));
+                var threshold = (ThresholdStrategy)thresholdGenes.CreateStrategy();
+                var hybrid = new HybridParameters(Values[20], Values[21], Values[22], Values[23] / 20d, Values[24] == 0 ? double.NegativeInfinity : (Values[24] - 21) * 25);
+
+                return new HybridStrategy(parameters, threshold, hybrid, name);
+            }
 
             return new ParameterizedExpectimaxStrategy(parameters, name);
         }

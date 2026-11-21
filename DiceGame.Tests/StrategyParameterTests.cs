@@ -12,6 +12,51 @@ namespace DiceGame.Tests;
 public sealed class StrategyParameterTests
 {
     [Test]
+    public void HybridInspectionExplainsDecisionSourcesAndInactiveThresholds()
+    {
+        var baseline = StrategyParameterCatalog.Describe(StrategyGenes.Hybrid.CreateStrategy());
+        var threshold = StrategyParameterCatalog.Describe(StrategyGenes.HybridAdaptive.CreateStrategy());
+
+        Assert.That(baseline.Single(parameter => parameter.Key == "BankingMode").Value, Is.EqualTo("Expectimax"));
+        Assert.That(baseline.Single(parameter => parameter.Key == "Threshold.StopThreshold").Status, Does.Contain("Inactive"));
+        Assert.That(threshold.Single(parameter => parameter.Key == "BankingMode").Value, Is.EqualTo("Threshold"));
+        Assert.That(threshold.Single(parameter => parameter.Key == "Threshold.StopThreshold").Status, Is.EqualTo("Configured"));
+        Assert.That(baseline.Select(parameter => parameter.Key).Distinct().Count(), Is.EqualTo(baseline.Count));
+    }
+
+    [Test]
+    public async Task HybridIsTheBrowserDefaultAndCanBeSavedLoadedAndInspected()
+    {
+        await using var context = new BunitContext();
+        var library = new StrategyLibrary();
+        context.Services.AddSingleton(library);
+        context.JSInterop.Mode = JSRuntimeMode.Loose;
+        var component = context.Render<StrategyLab>();
+        Assert.That(component.Find("#strategy-name").GetAttribute("value"), Is.EqualTo("Evolved Hybrid"));
+        var values = new[] { "2", "1", "2", "3" };
+
+        for (var index = 0; index < values.Length; index++)
+        {
+            await component.FindAll(".lab-grid > section:first-child input[type=number]")[index].ChangeAsync(values[index]);
+        }
+
+        await component.Find("#training-player-mode").ChangeAsync("fixed");
+        await component.Find("#training-player-count").ChangeAsync("2");
+        await component.Find("#training-seed").ChangeAsync("71");
+        await component.Find("#train").ClickAsync(new Microsoft.AspNetCore.Components.Web.MouseEventArgs());
+        var saved = library.Saved.Single();
+        var imported = library.Add(StrategyFile.FromJson(saved.ToJson(), "Imported"));
+        await component.Find("#inspect-strategy").ChangeAsync(imported.Name);
+
+        Assert.That(saved.Genes.Family, Is.EqualTo("Hybrid"));
+        Assert.That(saved.Genes.Values.Length, Is.EqualTo(25));
+        Assert.That(imported.Genes.Values, Is.EqualTo(saved.Genes.Values));
+        Assert.That(library.Get(imported.Name), Is.TypeOf<HybridStrategy>());
+        Assert.That(component.Find("[data-parameter=BankingMode] dd p").TextContent, Does.Contain("Expectimax"));
+        Assert.That(component.Find("a[download]").GetAttribute("href"), Does.StartWith("data:application/json"));
+    }
+
+    [Test]
     public void EveryThresholdConfigurationPropertyHasANameDescriptionAndValue()
     {
         var descriptions = StrategyParameterCatalog.Describe(new AdaptiveStrategy());

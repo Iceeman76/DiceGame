@@ -12,15 +12,19 @@ public sealed class InteractiveGame
     private readonly List<Player> players;
     private readonly List<int> openingContenders;
     private readonly List<string> history = [];
+    private readonly bool enablePresentation;
+    private ImmutableArray<IPlayerStrategy>[] opponentStrategies;
     private Dice passedTable = new(0);
     private int passedScore;
     private int rollsThisTurn;
     private int currentPlayerIndex;
 
-    public InteractiveGame(IEnumerable<Player> players, Func<int>? rollDie = null)
+    public InteractiveGame(IEnumerable<Player> players, Func<int>? rollDie = null, bool enablePresentation = true)
     {
         this.players = players.ToList();
         this.rollDie = rollDie ?? (() => Randomizer.Integer(1, 6));
+        this.enablePresentation = enablePresentation;
+        opponentStrategies = BuildOpponentStrategies();
         openingContenders = Enumerable.Range(0, this.players.Count).ToList();
     }
 
@@ -91,7 +95,7 @@ public sealed class InteractiveGame
         var table = new Dice(0);
         table.AddRange(Enumerable.Repeat(2, state.TableDiceCount));
 
-        return new InteractiveGame(simulatedPlayers, rollDie)
+        return new InteractiveGame(simulatedPlayers, rollDie, enablePresentation: false)
         {
             currentPlayerIndex = playerIndex,
             CurrentRound = state.CurrentRound,
@@ -125,6 +129,7 @@ public sealed class InteractiveGame
         var orderedPlayers = players.Skip(starterIndex).Concat(players.Take(starterIndex)).ToList();
         players.Clear();
         players.AddRange(orderedPlayers);
+        opponentStrategies = BuildOpponentStrategies();
         BeginTurn();
         var faceName = new[] { "", "one", "two", "three", "four", "five", "six" }[highest];
         Message = $"{CurrentPlayer.Name} scored a {faceName} and starts the game!";
@@ -142,11 +147,17 @@ public sealed class InteractiveGame
             TurnScore = passedScore;
             Hand = new Dice(5 - Table.Count);
             RefreshHotDice();
-            Log($"{CurrentPlayer.Name}: took over {TurnScore} points.");
+            if (enablePresentation)
+            {
+                Log($"{CurrentPlayer.Name}: took over {TurnScore} points.");
+            }
         }
         else
         {
-            Log($"{CurrentPlayer.Name}: starts fresh with five dice.");
+            if (enablePresentation)
+            {
+                Log($"{CurrentPlayer.Name}: starts fresh with five dice.");
+            }
         }
 
         passedTable = new Dice(0);
@@ -165,7 +176,10 @@ public sealed class InteractiveGame
             Hand[index] = rollDie();
         }
 
-        Log($"{CurrentPlayer.Name}: rolled {string.Join(", ", Hand)}.");
+        if (enablePresentation)
+        {
+            Log($"{CurrentPlayer.Name}: rolled {string.Join(", ", Hand)}.");
+        }
 
         if (Hand.Score() == 0)
         {
@@ -195,7 +209,10 @@ public sealed class InteractiveGame
         var earnedScore = selection.Score;
         TurnScore += earnedScore;
         Phase = MatchPhase.ReadyToRoll;
-        Message = $"{earnedScore} points added. {(TurnScore >= 250 ? "Bank or roll again." : "Reach 250 points to bank.")}";
+        if (enablePresentation)
+        {
+            Message = $"{earnedScore} points added. {(TurnScore >= 250 ? "Bank or roll again." : "Reach 250 points to bank.")}";
+        }
         RefreshHotDice();
     }
 
@@ -210,8 +227,11 @@ public sealed class InteractiveGame
         passedTable = new Dice(0);
         passedTable.AddRange(Table);
         passedScore = TurnScore;
-        Message = $"{CurrentPlayer.Name}: banked {TurnScore} points.";
-        Log(Message);
+        if (enablePresentation)
+        {
+            Message = $"{CurrentPlayer.Name}: banked {TurnScore} points.";
+            Log(Message);
+        }
         Phase = MatchPhase.TurnEnded;
     }
 
@@ -230,15 +250,18 @@ public sealed class InteractiveGame
         {
             CurrentRound = TotalRounds;
             Phase = MatchPhase.Finished;
-            Message = Winners.Count == 1 ? $"{Winners[0].Name} wins with {Winners[0].TotalScore.Value} points." : $"Shared victory: {string.Join(", ", Winners.Select(player => player.Name))}.";
-            Log(Message);
+            if (enablePresentation)
+            {
+                Message = Winners.Count == 1 ? $"{Winners[0].Name} wins with {Winners[0].TotalScore.Value} points." : $"Shared victory: {string.Join(", ", Winners.Select(player => player.Name))}.";
+                Log(Message);
+            }
 
             return;
         }
 
         BeginTurn();
 
-        if (CurrentRound == TotalRounds && currentPlayerIndex == 0)
+        if (enablePresentation && CurrentRound == TotalRounds && currentPlayerIndex == 0)
         {
             Log("Last round! Every player has one final turn.");
         }
@@ -293,8 +316,11 @@ public sealed class InteractiveGame
         Hand = new Dice(5);
         Table = new Dice(0);
         Phase = passedScore > 0 ? MatchPhase.ChooseInheritance : MatchPhase.ReadyToRoll;
-        var turnMessage = $"{CurrentPlayer.Name}'s turn.{(IsHumanTurn ? " Roll the dice." : "")}";
-        Message = Phase == MatchPhase.ChooseInheritance ? $"Take over {passedScore} points or start fresh." : turnMessage;
+        if (enablePresentation)
+        {
+            var turnMessage = $"{CurrentPlayer.Name}'s turn.{(IsHumanTurn ? " Roll the dice." : "")}";
+            Message = Phase == MatchPhase.ChooseInheritance ? $"Take over {passedScore} points or start fresh." : turnMessage;
+        }
     }
 
     private void RefreshHotDice()
@@ -318,18 +344,46 @@ public sealed class InteractiveGame
 
     private void Bust()
     {
-        Message = TurnScore == 0 ? $"{CurrentPlayer.Name}: no scoring dice. Turn over." : $"{CurrentPlayer.Name}: bust. {TurnScore} points lost.";
+        if (enablePresentation)
+        {
+            Message = TurnScore == 0 ? $"{CurrentPlayer.Name}: no scoring dice. Turn over." : $"{CurrentPlayer.Name}: bust. {TurnScore} points lost.";
+        }
         TurnScore = 0;
         passedScore = 0;
         passedTable = new Dice(0);
         Phase = MatchPhase.TurnEnded;
-        Log(Message);
+        if (enablePresentation)
+        {
+            Log(Message);
+        }
     }
 
     private GameState BuildState()
     {
         var myScore = CurrentPlayer.TotalScore.Value;
-        var opponentScores = players.Where(player => ReferenceEquals(player, CurrentPlayer) is false).Select(player => player.TotalScore.Value).ToList();
+        var opponentScores = ImmutableArray.CreateBuilder<int>(players.Count - 1);
+        var opponentTotal = 0L;
+        var leaderScore = myScore;
+        var playerRank = 1;
+
+        for (var index = 0; index < players.Count; index++)
+        {
+            var score = players[index].TotalScore.Value;
+            leaderScore = Math.Max(leaderScore, score);
+
+            if (score > myScore)
+            {
+                playerRank++;
+            }
+
+            if (index.Equals(currentPlayerIndex) is false)
+            {
+                opponentScores.Add(score);
+                opponentTotal += score;
+            }
+        }
+
+        var averageOpponentScore = opponentScores.Count > 0 ? (int)(opponentTotal / opponentScores.Count) : 0;
 
         return new GameState
         {
@@ -341,17 +395,19 @@ public sealed class InteractiveGame
             TotalRounds = TotalRounds,
             IsLastPlayerInRound = currentPlayerIndex == players.Count - 1,
             MyTotalScore = myScore,
-            PlayerRank = players.Count(player => player.TotalScore.Value > myScore) + 1,
+            PlayerRank = playerRank,
             PlayerCount = players.Count,
             PlayersRemainingInRound = players.Count - currentPlayerIndex - 1,
-            OpponentScores = opponentScores.ToImmutableArray(),
-            OpponentStrategies = players.Where(player => ReferenceEquals(player, CurrentPlayer) is false).Select(player => player.Strategy).ToImmutableArray(),
-            LeaderScore = players.Max(player => player.TotalScore.Value),
-            AverageOpponentScore = (int)opponentScores.DefaultIfEmpty().Average(),
+            OpponentScores = opponentScores.MoveToImmutable(),
+            OpponentStrategies = opponentStrategies[currentPlayerIndex],
+            LeaderScore = leaderScore,
+            AverageOpponentScore = averageOpponentScore,
             InheritedScore = passedScore,
             InheritedHandDiceCount = InheritedDiceCount
         };
     }
+
+    private ImmutableArray<IPlayerStrategy>[] BuildOpponentStrategies() => players.Select(current => players.Where(player => ReferenceEquals(player, current) is false).Select(player => player.Strategy).ToImmutableArray()).ToArray();
 
     private void RequirePhase(MatchPhase expected)
     {
@@ -363,5 +419,11 @@ public sealed class InteractiveGame
         throw new InvalidOperationException($"Expected {expected}, but the match is in {Phase}.");
     }
 
-    private void Log(string message) => history.Insert(0, message);
+    private void Log(string message)
+    {
+        if (enablePresentation)
+        {
+            history.Insert(0, message);
+        }
+    }
 }

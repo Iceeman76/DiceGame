@@ -5,6 +5,13 @@ using DiceGame;
 using DiceGame.Strategies;
 using Simulator;
 
+if (args is ["benchmark"])
+{
+    PerformanceCommand.Run();
+
+    return;
+}
+
 if (args.Length > 0)
 {
     Environment.ExitCode = TrainingCommand.Run(args);

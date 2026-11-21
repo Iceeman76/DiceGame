@@ -10,9 +10,39 @@ public static class StrategyParameterCatalog
     {
         ThresholdStrategy threshold => DescribeThreshold(threshold),
         ParameterizedExpectimaxStrategy expectimax => DescribeExpectimax(expectimax.Parameters),
+        HybridStrategy hybrid => DescribeHybrid(hybrid),
         ExpectimaxStrategy => DescribeExpectimax(new ExpectimaxParameters()),
         _ => []
     };
+
+    private static StrategyParameter[] DescribeHybrid(HybridStrategy strategy)
+    {
+        var modes = strategy.HybridParameters;
+        var controls = new StrategyParameter[]
+        {
+            new(nameof(modes.BankingMode), "Banking decision source", "Expectimax, threshold rules, either component may bank early, or both must agree before banking. Optional risk limits can also bank; final-turn safeguards take priority.", modes.BankingMode switch { 1 => "Threshold", 2 => "Either may bank", 3 => "Both must agree", _ => "Expectimax" }),
+            new(nameof(modes.DiceSelectionMode), "Dice-selection source", "Use Expectimax's scoring subset or the threshold component's keeping limits. The last player's final turn always uses the exact victory-share policy.", modes.DiceSelectionMode == 0 ? "Expectimax" : "Threshold keeping limits"),
+            new(nameof(modes.InheritanceMode), "Inheritance decision source", "Choose the Expectimax decision, threshold gates, require both to accept, or accept if either agrees. Optional risk limits may reject inheritance.", modes.InheritanceMode switch { 1 => "Threshold", 2 => "Both must accept", 3 => "Either may accept", _ => "Expectimax" }),
+            new(nameof(modes.MaxBustProbability), "Hybrid maximum bust probability", "Bank or reject inheritance if the next-roll bust chance exceeds this value. Uses the hybrid's actual dice-selection rule. 100% disables the limit.", modes.MaxBustProbability.ToString("P0"), modes.MaxBustProbability >= 1 ? "Disabled" : "Configured"),
+            new(nameof(modes.MinimumExpectedNetGain), "Hybrid minimum expected net gain", "Bank or reject inheritance when next-roll expected point gain, including lost points on bust, falls below this value. Uses the selected dice rule.", double.IsNegativeInfinity(modes.MinimumExpectedNetGain) ? "Disabled" : modes.MinimumExpectedNetGain.ToString())
+        };
+        var expectimax = DescribeExpectimax(strategy.ExpectimaxParameters).Select(parameter => parameter.Key == "RollSearch" ? parameter with { Description = "Exact roll search for the Expectimax component. Hybrid overrides can change later decisions, so this is not an exact value calculation for the entire hybrid policy. Complete match simulations evaluate the actual hybrid.", Value = "Expectimax component" } : parameter);
+        var threshold = DescribeThreshold(strategy.ThresholdParameters)
+            .Where(parameter => parameter.Key is not ("SecureWinOnFinalTurn" or "SimulationBudget" or "MaxBustProbability" or "MinimumExpectedNetGain"))
+            .Select(parameter =>
+            {
+                var active = parameter.Key switch
+                {
+                    "MaxTwosToKeepPerRoll" or "MaxFivesToKeepPerRoll" or "SaveTripleOnes" => modes.DiceSelectionMode == 1,
+                    "TakeInheritanceMinScore" or "TakeInheritanceMinHandDice" or "TakeInheritanceWhenTrailing" => modes.InheritanceMode is not 0,
+                    _ => modes.BankingMode is not 0
+                };
+
+                return parameter with { Key = "Threshold." + parameter.Key, Name = "Threshold: " + parameter.Name, Status = active ? parameter.Status : "Inactive: component not selected" };
+            });
+
+        return [.. controls, .. expectimax, .. threshold];
+    }
 
     private static StrategyParameter[] DescribeThreshold(ThresholdStrategy strategy) =>
     [

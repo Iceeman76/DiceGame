@@ -19,6 +19,9 @@ public sealed record TrainingOptions
     public int MaximumPlayers { get; init; } = 6;
     public bool VaryPlayerCount { get; init; } = true;
     public string StrategyFamily { get; init; } = "Threshold";
+    public string[] OpponentNames { get; init; } = ["Passive", "Bold", "Adaptive", "Expectimax"];
+    public StrategyFile[] CustomOpponents { get; init; } = [];
+    public bool IncludeGenerationWinners { get; init; } = true;
 }
 
 public sealed record TrainingProgress(int Generation, StrategyEvaluation Training, StrategyEvaluation Validation);
@@ -36,14 +39,34 @@ public static class GeneticOptimizer
 {
     public static IPlayerStrategy[] Baselines => [new PassiveStrategy(), new BoldStrategy(), new AdaptiveStrategy(), new ExpectimaxStrategy()];
 
+    public static IPlayerStrategy[] ResolveOpponents(TrainingOptions options)
+    {
+        var available = Baselines.Concat(options.CustomOpponents.Select(strategy => strategy.Genes.CreateStrategy(strategy.Name))).ToArray();
+        var opponents = options.OpponentNames.Distinct(StringComparer.OrdinalIgnoreCase).Select(name => available.Single(strategy => strategy.Name.Equals(name, StringComparison.OrdinalIgnoreCase))).ToArray();
+
+        if (opponents.Length == 0)
+        {
+            throw new ArgumentException("Select at least one training opponent.", nameof(options));
+        }
+
+        return opponents;
+    }
+
     public static TrainingResult Train(TrainingOptions options, Action<TrainingProgress>? report = null)
         => TrainAsync(options, report, yieldToBrowser: false).GetAwaiter().GetResult();
 
     public static async Task<TrainingResult> TrainAsync(TrainingOptions options, Action<TrainingProgress>? report = null, CancellationToken cancellationToken = default, bool yieldToBrowser = true, Action<LiveTrainingProgress>? reportLive = null)
     {
         var random = new Random(options.Seed);
+        var selectedOpponents = ResolveOpponents(options);
         var baselineGenes = StrategyGenes.Baseline(options.StrategyFamily);
         var population = new List<StrategyGenes> { baselineGenes };
+
+        if (options.StrategyFamily == "Hybrid" && options.Population > 1)
+        {
+            population.Add(StrategyGenes.HybridAdaptive);
+        }
+
         var archive = new List<IPlayerStrategy>();
         var bestGenes = baselineGenes;
         var completedGames = 0L;
@@ -52,7 +75,7 @@ public static class GeneticOptimizer
         StrategyComparison[] currentOpponents = [];
         PlayerCountEvaluation[] currentByPlayerCount = [];
         var validationSeed = unchecked(options.Seed ^ 0x39A72D15);
-        var bestValidation = await EvaluateAsync(bestGenes, Baselines, options.ValidationGames, validationSeed, "Baseline validation", 0, 0);
+        var bestValidation = await EvaluateAsync(bestGenes, selectedOpponents, options.ValidationGames, validationSeed, "Baseline validation", 0, 0);
         var bestValidationByPlayerCount = currentByPlayerCount;
         bestValidationShare = bestValidation.WinShare;
 
@@ -63,7 +86,7 @@ public static class GeneticOptimizer
 
         for (var generation = 1; generation <= options.Generations; generation++)
         {
-            var opponents = Baselines.Concat(archive).ToArray();
+            var opponents = selectedOpponents.Concat(archive).ToArray();
             var trainingSeed = random.Next();
             var evaluated = new List<(StrategyGenes Genes, StrategyEvaluation Evaluation)>();
 
@@ -75,7 +98,7 @@ public static class GeneticOptimizer
 
             var ranked = evaluated.OrderByDescending(candidate => candidate.Evaluation.WinShare).ToArray();
             var champion = ranked[0];
-            var validation = await EvaluateAsync(champion.Genes, Baselines, options.ValidationGames, validationSeed, "Validating generation winner", generation, options.Population);
+            var validation = await EvaluateAsync(champion.Genes, selectedOpponents, options.ValidationGames, validationSeed, "Validating generation winner", generation, options.Population);
 
             if (validation.WinShare > bestValidation.WinShare)
             {
@@ -87,11 +110,22 @@ public static class GeneticOptimizer
             bestValidationShare = bestValidation.WinShare;
             reportLive?.Invoke(new LiveTrainingProgress("Generation completed", generation, options.Population, completedGames, totalGames, validation, bestValidationShare) { Opponents = currentOpponents, ByPlayerCount = currentByPlayerCount });
             report?.Invoke(new TrainingProgress(generation, champion.Evaluation, validation));
-            archive.Add(champion.Genes.CreateStrategy($"Generation {generation}"));
-
-            if (archive.Count > 8)
+            if (options.IncludeGenerationWinners)
             {
-                archive.RemoveAt(0);
+                var archiveName = $"Generation {generation}";
+                var suffix = 2;
+
+                while (selectedOpponents.Concat(archive).Any(opponent => opponent.Name.Equals(archiveName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    archiveName = $"Generation {generation} ({suffix++})";
+                }
+
+                archive.Add(champion.Genes.CreateStrategy(archiveName));
+
+                if (archive.Count > 8)
+                {
+                    archive.RemoveAt(0);
+                }
             }
 
             var eliteCount = Math.Min(options.Population - 1, Math.Max(2, options.Population / 5));

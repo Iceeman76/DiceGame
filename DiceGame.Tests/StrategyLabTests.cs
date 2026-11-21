@@ -11,6 +11,28 @@ namespace DiceGame.Tests;
 [TestFixture]
 public sealed class StrategyLabTests
 {
+    [TestCase("Threshold")]
+    [TestCase("Expectimax")]
+    [TestCase("Hybrid")]
+    public void DuplicateMaximumLengthNamesCanStillBeExportedAndLoaded(string family)
+    {
+        var library = new StrategyLibrary();
+
+        for (var index = 0; index < 12; index++)
+        {
+            var name = new string(index % 2 == 0 ? 'A' : 'a', 60);
+            var saved = library.Add(new StrategyFile(name, StrategyGenes.Baseline(family)));
+            var restored = StrategyFile.FromJson(saved.ToJson(), "Imported");
+
+            Assert.That(saved.Name.Length, Is.LessThanOrEqualTo(60));
+            Assert.That(restored.Name, Is.EqualTo(saved.Name));
+            Assert.That(restored.Genes.Family, Is.EqualTo(family));
+            Assert.That(library.Get(saved.Name).Name, Is.EqualTo(saved.Name));
+        }
+
+        Assert.That(library.Saved.Select(strategy => strategy.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count(), Is.EqualTo(12));
+    }
+
     [TestCase(-1, true)]
     [TestCase(0, false)]
     [TestCase(100, false)]
@@ -268,8 +290,9 @@ public sealed class StrategyLabTests
         Assert.That(component.Find(".lab-status").TextContent, Does.Contain("Saved Evolved"));
         Assert.That(int.TryParse(component.Find(".lab-seed").TextContent.Split(':')[1].Trim(), out _), Is.True);
         Assert.That(component.FindAll("fieldset[disabled]"), Is.Empty);
-        Assert.That(component.FindAll(".comparison-table tbody tr").Count, Is.EqualTo(5));
-        Assert.That(component.Find(".comparison-table").TextContent, Does.Contain("Passive").And.Contain("Bold").And.Contain("Adaptive").And.Contain("Expectimax"));
+        Assert.That(component.FindAll(".comparison-table tbody tr").Count, Is.EqualTo(3));
+        Assert.That(component.Find(".comparison-table").TextContent, Does.Contain("Adaptive").And.Contain("Expectimax"));
+        Assert.That(component.Find(".comparison-table").TextContent, Does.Not.Contain("Passive").And.Not.Contain("Bold"));
     }
 
     [Test]

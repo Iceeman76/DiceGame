@@ -8,6 +8,7 @@ namespace DiceGame.Strategies;
 public sealed record ExpectimaxStrategy : IPlayerStrategy
 {
     private static readonly Outcome[][] outcomes = [.. Enumerable.Range(0, 6).Select(BuildOutcomes)];
+    private static readonly int maximumRollScore = outcomes.SelectMany(rolls => rolls).SelectMany(outcome => outcome.Selections).Max(selection => selection.Score);
     private static readonly TurnPolicy scoringPolicy = new(FindBankingBoundary(), score => score);
     private static readonly ConcurrentDictionary<(int Gap, int TiedOpponents), TurnPolicy> finalPolicies = new();
 
@@ -112,7 +113,13 @@ public sealed record ExpectimaxStrategy : IPlayerStrategy
             frequencies[faces] = frequencies.GetValueOrDefault(faces) + 1;
         }
 
-        return frequencies.Select(frequency => new Outcome(GetSelections(frequency.Key.Ones, frequency.Key.Twos, frequency.Key.Fives).ToArray(), (double)frequency.Value / combinations)).ToArray();
+        return frequencies.Select(frequency =>
+        {
+            var selections = GetSelections(frequency.Key.Ones, frequency.Key.Twos, frequency.Key.Fives).ToArray();
+            var transitions = selections.Select(selection => new Transition(selection.Score / DiceSelection.TwoScore, diceCount == selection.Total ? 5 : diceCount - selection.Total)).ToArray();
+
+            return new Outcome(selections, transitions, (double)frequency.Value / combinations);
+        }).ToArray();
     }
 
     internal static IEnumerable<DiceSelection> GetSelections(int availableOnes, int availableTwos, int availableFives)
@@ -134,13 +141,17 @@ public sealed record ExpectimaxStrategy : IPlayerStrategy
         }
     }
 
-    private sealed record Outcome(DiceSelection[] Selections, double Probability);
+    private readonly record struct Transition(int ScoreSteps, int DiceCount);
+    private sealed record Outcome(DiceSelection[] Selections, Transition[] Transitions, double Probability);
 
     internal sealed class TurnPolicy
     {
         private readonly Func<int, double> utility;
-        private readonly double[,] values;
-        private readonly double[,] rollValues;
+        private readonly double[] values;
+        private readonly double[] rollValues;
+        private readonly double[] bankValues;
+        private readonly int maximumScoreIndex;
+        private readonly int bankScoreCount;
         private readonly Func<int, int, double>? positionUtility;
         private readonly double bustValue;
 
@@ -150,8 +161,21 @@ public sealed record ExpectimaxStrategy : IPlayerStrategy
             this.positionUtility = positionUtility;
             this.bustValue = bustValue ?? utility(0);
             var scoreSteps = (maximumScore + DiceSelection.TwoScore - 1) / DiceSelection.TwoScore;
-            values = new double[scoreSteps + 1, 6];
-            rollValues = new double[scoreSteps + 1, 6];
+            maximumScoreIndex = scoreSteps;
+            bankScoreCount = scoreSteps + maximumRollScore / DiceSelection.TwoScore + 1;
+            values = new double[(scoreSteps + 1) * 6];
+            rollValues = new double[values.Length];
+            bankValues = new double[bankScoreCount * 6];
+
+            for (var scoreIndex = 0; scoreIndex < bankScoreCount; scoreIndex++)
+            {
+                var score = scoreIndex * DiceSelection.TwoScore;
+
+                for (var diceCount = 1; diceCount <= 5; diceCount++)
+                {
+                    bankValues[scoreIndex * 6 + diceCount] = positionUtility?.Invoke(score, diceCount) ?? utility(score);
+                }
+            }
 
             for (var scoreIndex = scoreSteps; scoreIndex >= 0; scoreIndex--)
             {
@@ -160,29 +184,32 @@ public sealed record ExpectimaxStrategy : IPlayerStrategy
                 for (var diceCount = 1; diceCount <= 5; diceCount++)
                 {
                     var rollValue = EvaluateRoll(score, diceCount);
-                    rollValues[scoreIndex, diceCount] = rollValue;
-                    values[scoreIndex, diceCount] = score >= InteractiveGame.MinimumBankScore ? Math.Max(BankValue(score, diceCount), rollValue) : rollValue;
+                    rollValues[scoreIndex * 6 + diceCount] = rollValue;
+                    values[scoreIndex * 6 + diceCount] = score >= InteractiveGame.MinimumBankScore ? Math.Max(BankValue(score, diceCount), rollValue) : rollValue;
                 }
             }
         }
 
         public double BankValue(int score) => utility(score);
-        public double BankValue(int score, int diceCount) => positionUtility?.Invoke(score, diceCount) ?? utility(score);
-        public double Value(int score, int diceCount) => score / DiceSelection.TwoScore < values.GetLength(0) ? values[score / DiceSelection.TwoScore, diceCount] : BankValue(score, diceCount);
-        public double RollValue(int score, int diceCount) => score / DiceSelection.TwoScore < rollValues.GetLength(0) ? rollValues[score / DiceSelection.TwoScore, diceCount] : EvaluateRoll(score, diceCount);
+        public double BankValue(int score, int diceCount) => score / DiceSelection.TwoScore < bankScoreCount ? bankValues[score / DiceSelection.TwoScore * 6 + diceCount] : positionUtility?.Invoke(score, diceCount) ?? utility(score);
+        public double Value(int score, int diceCount) => score / DiceSelection.TwoScore <= maximumScoreIndex ? values[score / DiceSelection.TwoScore * 6 + diceCount] : BankValue(score, diceCount);
+        public double RollValue(int score, int diceCount) => score / DiceSelection.TwoScore <= maximumScoreIndex ? rollValues[score / DiceSelection.TwoScore * 6 + diceCount] : EvaluateRoll(score, diceCount);
 
         private double EvaluateRoll(int score, int diceCount)
         {
             var expectedValue = 0d;
+            var scoreIndex = score / DiceSelection.TwoScore;
 
             foreach (var outcome in outcomes[diceCount])
             {
                 var bestValue = outcome.Selections.Length == 0 ? bustValue : double.NegativeInfinity;
 
-                foreach (var selection in outcome.Selections)
+                foreach (var transition in outcome.Transitions)
                 {
-                    var remainingDice = diceCount - selection.Total;
-                    bestValue = Math.Max(bestValue, Value(score + selection.Score, remainingDice == 0 ? 5 : remainingDice));
+                    var nextScoreIndex = scoreIndex + transition.ScoreSteps;
+                    var offset = nextScoreIndex * 6 + transition.DiceCount;
+                    var value = nextScoreIndex <= maximumScoreIndex ? values[offset] : nextScoreIndex < bankScoreCount ? bankValues[offset] : BankValue(score + transition.ScoreSteps * DiceSelection.TwoScore, transition.DiceCount);
+                    bestValue = Math.Max(bestValue, value);
                 }
 
                 expectedValue += outcome.Probability * bestValue;

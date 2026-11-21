@@ -19,7 +19,7 @@ public sealed class Game
             Randomizer.Shuffle(orderedPlayers);
         }
 
-        match = new InteractiveGame(orderedPlayers, rollDie);
+        match = new InteractiveGame(orderedPlayers, rollDie, enablePresentation: verbose);
     }
 
     public GameResult Start()
