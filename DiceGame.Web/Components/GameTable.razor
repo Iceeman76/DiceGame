@@ -1,5 +1,7 @@
+@page "/"
 @implements IAsyncDisposable
 @inject IJSRuntime JavaScript
+@inject StrategyLibrary strategies
 
 <PageTitle>Dice Game</PageTitle>
 
@@ -7,6 +9,7 @@
     <header class="masthead">
         <a class="brand" href="./" aria-label="Dice Game home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="3" y="3" width="26" height="26" rx="5" fill="none" stroke="currentColor" stroke-width="2" /><g fill="currentColor"><circle cx="10" cy="10" r="2" /><circle cx="22" cy="10" r="2" /><circle cx="16" cy="16" r="2" /><circle cx="10" cy="22" r="2" /><circle cx="22" cy="22" r="2" /></g></svg></span>Dice Game</a>
         <div class="header-controls">
+            <a class="text-button" href="strategies">Strategy lab</a>
             <button class="turbo-switch" role="switch" aria-checked="@(turboEnabled ? "true" : "false")" aria-label="Turbo mode" @onclick="ToggleTurbo"><span class="switch-track"><span></span></span>Turbo</button>
             <button class="icon-button" @onclick="ToggleSoundAsync" aria-label="@(soundEnabled ? "Mute sound" : "Enable sound")">@(soundEnabled ? "Sound on" : "Sound off")</button>
         </div>
@@ -236,6 +239,7 @@
                         }
                     </div>
                     <div class="opponent-settings">
+                        <StrategyFiles Changed="StateHasChanged" />
                         @foreach (var seat in ActiveSeats)
                         {
                             <div class="opponent-setting">
@@ -297,7 +301,6 @@
 </div>
 
 @code {
-    private readonly PlayerStrategies strategies = new();
     private readonly string[] humanNames = Enumerable.Range(1, 6).Select(number => $"Player {number}").ToArray();
     private readonly ComputerSeat[] seats = [new("Alma", "Passive"), new("Hugo", "Bold"), new("Elsa", "Adaptive"), new("Nils", "Adaptive"), new("Vera", "Bold"), new("Leo", "Passive")];
     private readonly Dictionary<string, int> openingRollValues = [];

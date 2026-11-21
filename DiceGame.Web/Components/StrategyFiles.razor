@@ -1,0 +1,56 @@
+@using DiceGame.Training
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Text.Json
+@inject StrategyLibrary Library
+
+<div class="strategy-files">
+    <label>Load strategies from JSON <InputFile OnChange="LoadAsync" accept=".json,application/json" multiple disabled="@Disabled" /></label>
+    <p>Loaded strategies are available in both the lab and game setup until you reload the browser. Download a JSON file to keep them.</p>
+    @if (message.Length > 0)
+    {
+        <p role="status">@message</p>
+    }
+    @foreach (var strategy in Library.Saved)
+    {
+        <div class="saved-strategy"><span>@strategy.Name</span><a class="text-button" href="@DownloadUrl(strategy)" download="@(strategy.Name + ".json")">Save JSON</a></div>
+    }
+</div>
+
+@code {
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback Changed { get; set; }
+    private string message = "";
+
+    private static string DownloadUrl(StrategyFile strategy) => "data:application/json;charset=utf-8," + Uri.EscapeDataString(strategy.ToJson());
+
+    private async Task LoadAsync(InputFileChangeEventArgs args)
+    {
+        if (args.FileCount > 20)
+        {
+            message = "Choose at most 20 strategy files at a time.";
+
+            return;
+        }
+
+        var messages = new List<string>();
+
+        foreach (var file in args.GetMultipleFiles(20))
+        {
+            try
+            {
+                await using var stream = file.OpenReadStream(1_048_576);
+                using var reader = new StreamReader(stream);
+                var strategy = StrategyFile.FromJson(await reader.ReadToEndAsync(), Path.GetFileNameWithoutExtension(file.Name));
+                var saved = Library.Add(strategy);
+                messages.Add($"Loaded {saved.Name}.");
+            }
+            catch (Exception exception) when (exception is JsonException or IOException or InvalidOperationException or KeyNotFoundException)
+            {
+                messages.Add($"Could not load {file.Name}: invalid strategy JSON or file larger than 1 MB.");
+            }
+        }
+
+        message = string.Join(" ", messages);
+        await Changed.InvokeAsync();
+    }
+}

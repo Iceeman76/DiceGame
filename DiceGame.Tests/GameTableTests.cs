@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using DiceGame.Strategies;
 using Bunit;
 using DiceGame.Web.Components;
@@ -144,6 +145,7 @@ public sealed class GameTableTests
     public async Task HumanRollAnnouncesThreeOnesWhenSoundIsEnabled(int onesCount, bool soundEnabled, int expectedAnnouncements)
     {
         await using var context = new BunitContext();
+        context.Services.AddSingleton<StrategyLibrary>();
         var audio = context.JSInterop.SetupModule("./js/dice-audio.js");
         audio.Mode = JSRuntimeMode.Loose;
         context.JSInterop.SetupModule("./js/player-preferences.js").Mode = JSRuntimeMode.Loose;
@@ -169,6 +171,7 @@ public sealed class GameTableTests
     public async Task ComputerTripleOnesAreAnnouncedOnce()
     {
         await using var context = new BunitContext();
+        context.Services.AddSingleton<StrategyLibrary>();
         var audio = context.JSInterop.SetupModule("./js/dice-audio.js");
         audio.Mode = JSRuntimeMode.Loose;
         context.JSInterop.SetupModule("./js/player-preferences.js").Mode = JSRuntimeMode.Loose;
@@ -276,7 +279,7 @@ public sealed class GameTableTests
         {
             await component.Find("#strategy-Alma").ChangeAsync(strategy.Name);
             Assert.That(component.Find(".opponent-setting p").TextContent, Is.EqualTo(strategy.Description));
-            Assert.That(new ComputerSeat("Alma", strategy.Name).CreateStrategy(strategies).Name, Is.EqualTo(strategy.Name));
+            Assert.That(new ComputerSeat("Alma", strategy.Name).CreateStrategy(new StrategyLibrary()).Name, Is.EqualTo(strategy.Name));
         }
     }
 
@@ -336,6 +339,7 @@ public sealed class GameTableTests
     private static BunitContext CreateContext(PlayerNamePreferences? savedNames = null)
     {
         var context = new BunitContext();
+        context.Services.AddSingleton<StrategyLibrary>();
         context.JSInterop.SetupModule("./js/dice-audio.js").Mode = JSRuntimeMode.Loose;
         var preferences = context.JSInterop.SetupModule("./js/player-preferences.js");
         preferences.Mode = JSRuntimeMode.Loose;

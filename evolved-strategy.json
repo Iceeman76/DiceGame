@@ -1,0 +1,54 @@
+{
+  "Training": {
+    "Options": {
+      "Population": 12,
+      "Generations": 5,
+      "Games": 200,
+      "ValidationGames": 1000,
+      "TestGames": 2000,
+      "Seed": 20261121
+    },
+    "Genes": {
+      "Values": [
+        17,
+        5,
+        11,
+        0,
+        5,
+        3,
+        5,
+        27,
+        25,
+        2,
+        1,
+        5,
+        5,
+        2
+      ]
+    },
+    "Validation": {
+      "Games": 1000,
+      "WinShare": 0.321,
+      "StandardError": 0.014736898458501239,
+      "AverageScore": 2190.2
+    }
+  },
+  "EvolvedTest": {
+    "Games": 2000,
+    "WinShare": 0.338,
+    "StandardError": 0.010544363034147578,
+    "AverageScore": 2230.475
+  },
+  "AdaptiveTest": {
+    "Games": 2000,
+    "WinShare": 0.349,
+    "StandardError": 0.010625721292057695,
+    "AverageScore": 2374.975
+  },
+  "ExpectimaxTest": {
+    "Games": 2000,
+    "WinShare": 0.4081666666666666,
+    "StandardError": 0.010904687982647113,
+    "AverageScore": 2608.825
+  }
+}

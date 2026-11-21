@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Bunit;
 using DiceGame.Strategies;
 using DiceGame.Web.Components;
@@ -149,6 +150,7 @@ public sealed class MatchPresentationTests
     private static BunitContext CreateContext()
     {
         var context = new BunitContext();
+        context.Services.AddSingleton<StrategyLibrary>();
         context.JSInterop.SetupModule("./js/dice-audio.js").Mode = JSRuntimeMode.Loose;
         context.JSInterop.SetupModule("./js/player-preferences.js").Mode = JSRuntimeMode.Loose;
 

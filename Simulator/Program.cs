@@ -3,6 +3,14 @@ using System.Collections.Immutable;
 using System.Linq;
 using DiceGame;
 using DiceGame.Strategies;
+using Simulator;
+
+if (args.Length > 0)
+{
+    Environment.ExitCode = TrainingCommand.Run(args);
+
+    return;
+}
 
 const int simulations = 25_000;
 

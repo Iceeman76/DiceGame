@@ -1,0 +1,300 @@
+@page "/strategies"
+@using DiceGame.Training
+@using System.Diagnostics
+@implements IDisposable
+@inject StrategyLibrary Library
+
+<PageTitle>Strategy lab · Dice Game</PageTitle>
+<div class="app-shell lab-shell">
+    <header class="masthead">
+        <a class="brand" href="./" aria-label="Dice Game home"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="3" y="3" width="26" height="26" rx="5" fill="none" stroke="currentColor" stroke-width="2" /><g fill="currentColor"><circle cx="10" cy="10" r="2" /><circle cx="22" cy="10" r="2" /><circle cx="16" cy="16" r="2" /><circle cx="10" cy="22" r="2" /><circle cx="22" cy="22" r="2" /></g></svg></span>Dice Game</a>
+        <a class="text-button" href="./">Game table</a>
+    </header>
+    <main class="lab-main">
+        <div class="page-heading"><h1>Strategy lab</h1><span>Train. Compare. Play.</span></div>
+        <p class="lab-intro">Evolve a strategy through simulated games, compare it with other players, and take it to the game table.</p>
+        <section class="lab-card">
+            <h2>Your strategies</h2>
+            <StrategyFiles Disabled="busy" Changed="StateHasChanged" />
+        </section>
+        <div class="lab-grid">
+            <section class="lab-card">
+                <h2>Evolution</h2>
+                <p>Candidates compete against built-in strategies and previous generation winners. A separate validation set selects the best strategy.</p>
+                <fieldset disabled="@busy">
+                    <label for="strategy-name">Strategy name<input id="strategy-name" maxlength="60" @bind="strategyName" /></label>
+                    <div class="lab-fields">
+                        <label>Population<input type="number" min="2" max="200" @bind="population" /></label>
+                        <label>Generations<input type="number" min="1" max="200" @bind="generations" /></label>
+                        <label>Games per candidate<input type="number" min="1" max="10000" @bind="trainingGames" /></label>
+                        <label>Validation games<input type="number" min="1" max="20000" @bind="validationGames" /></label>
+                        <label>Mutation rate (%)<input id="mutation-rate" type="number" min="0" max="100" step="1" aria-describedby="mutation-help" @bind="mutationPercent" /></label>
+                        <label>Random seed<input id="training-seed" type="number" placeholder="Random" @bind="trainingSeed" /></label>
+                        <label>Table size<select id="training-player-mode" @bind="playerCountMode"><option value="varying">Vary from 2 to maximum</option><option value="fixed">Fixed player count</option></select></label>
+                        <label>@(VaryPlayerCount ? "Maximum players" : "Players")<input id="training-player-count" type="number" min="2" max="6" @bind="maximumPlayers" /></label>
+                    </div>
+                    <p id="mutation-help">Chance to mutate each gene in a new candidate. Elite candidates stay unchanged. At 0%, crossover still combines the parents' genes.</p>
+                    <p>Training and validation use the same table sizes. Varying cycles evenly through 2 to the selected maximum.</p>
+                    <button id="train" class="button primary" disabled="@(TrainingValid is false)" @onclick="TrainAsync">Start evolution</button>
+                </fieldset>
+                @if (lastTrainingSeed is not null)
+                {
+                    <p class="lab-seed">Training seed: @lastTrainingSeed</p>
+                }
+                @if (trainingLive is not null)
+                {
+                    <RunProgress Title="Evolution progress" Completed="trainingLive.CompletedGames" Total="trainingLive.TotalGames" Elapsed="trainingElapsed" Running="@(busy && runningTraining)" />
+                    <p class="live-phase"><span>@trainingLive.Phase</span>
+                        <span>Generation @trainingLive.Generation / @activeGenerations · candidate @(trainingLive.Candidate > 0 ? trainingLive.Candidate.ToString() : "—") / @activePopulation</span>
+                    </p>
+                    <div class="live-results"><span>Current win share <strong>@(trainingLive.CurrentEvaluation?.WinShare.ToString("P2") ?? "—")</strong></span><span>Average score <strong>@(trainingLive.CurrentEvaluation?.AverageScore.ToString("N1") ?? "—")</strong></span></div>
+                    <p>Best validated win share: <strong>@(trainingLive.Generation > 0 ? trainingLive.BestValidationWinShare.ToString("P2") : "—")</strong></p>
+                    <h3>Live strategy comparison</h3>
+                    <p class="comparison-scope"><strong>@ComparisonLabel</strong><span>@(trainingLive.Generation == 0 ? "Before generation 1" : $"Generation {trainingLive.Generation} of {activeGenerations}")</span></p>
+                    <div class="lab-table comparison-table"><table><thead><tr><th>Strategy</th><th>Win share</th><th>Average score</th><th>Appearances</th></tr></thead><tbody>
+                        <tr><td>@ComparisonPlayer</td><td>@(trainingLive.CurrentEvaluation?.WinShare.ToString("P2") ?? "—")</td><td>@(trainingLive.CurrentEvaluation?.AverageScore.ToString("N1") ?? "—")</td><td>@(trainingLive.CurrentEvaluation?.Games.ToString("N0") ?? "—")</td></tr>
+                        @foreach (var name in comparisonNames)
+                        {
+                            var comparison = trainingLive.Opponents.FirstOrDefault(opponent => opponent.Name == name);
+                            var hasGames = comparison is { Games: > 0 };
+                            <tr><td>@name</td><td>@(hasGames ? comparison!.WinShare.ToString("P2") : "—")</td><td>@(hasGames ? comparison!.AverageScore.ToString("N1") : "—")</td><td>@(hasGames ? comparison!.Games.ToString("N0") : "—")</td></tr>
+                        }
+                    </tbody></table></div>
+                    <p>This table starts fresh for each candidate or validation. Overall progress, the best validated result, and completed generations are kept. Each player counts as one appearance; shared wins split the credit.</p>
+                    <h3>Results by table size</h3>
+                    <div class="lab-table player-count-table"><table><thead><tr><th>Players</th><th>Matches</th><th>Win share</th><th>Equal strength</th><th>Average score</th></tr></thead><tbody>
+                        @foreach (var count in Enumerable.Range(activeMinimumPlayers, activeMaximumPlayers - activeMinimumPlayers + 1))
+                        {
+                            var evaluation = trainingLive.ByPlayerCount.FirstOrDefault(result => result.PlayerCount == count);
+                            var hasMatches = evaluation is { Games: > 0 };
+                            <tr><td>@count</td><td>@(evaluation?.Games.ToString("N0") ?? "0")</td><td>@(hasMatches ? evaluation!.WinShare.ToString("P2") : "—")</td><td>@((1d / count).ToString("P2"))</td><td>@(hasMatches ? evaluation!.AverageScore.ToString("N1") : "—")</td></tr>
+                        }
+                    </tbody></table></div>
+                    <p>Candidate results for the current evaluation, grouped by player count. Equal strength is the expected win share when all players are equally strong.</p>
+                }
+                @if (progress.Count > 0)
+                {
+                    <div class="lab-table"><table><thead><tr><th>Generation</th><th>Training win share</th><th>Validation win share</th></tr></thead><tbody>
+                        @foreach (var item in progress)
+                        {
+                            <tr><td>@item.Generation</td><td>@item.Training.WinShare.ToString("P2")</td><td>@item.Validation.WinShare.ToString("P2")</td></tr>
+                        }
+                    </tbody></table></div>
+                }
+                <p>Training and validation results guide selection. Use simulations with a new seed to test the saved strategy independently.</p>
+            </section>
+            <section class="lab-card">
+                <h2>Strategy tournament</h2>
+                <p>Select 2–6 strategies. Every selected strategy plays in every match; seating is shuffled and shared wins split the credit.</p>
+                <fieldset disabled="@busy">
+                    <div class="strategy-choices">
+                        @foreach (var strategy in Library.Available)
+                        {
+                            <label><input type="checkbox" checked="@selected.Contains(strategy.Name)" @onchange="() => Toggle(strategy.Name)" />@strategy.Name</label>
+                        }
+                    </div>
+                    <div class="lab-fields">
+                        <label>Matches<input id="simulation-games" type="number" min="1" max="100000" @bind="simulationGames" /></label>
+                        <label>Random seed<input id="simulation-seed" type="number" placeholder="Random" @bind="simulationSeed" /></label>
+                    </div>
+                    <button id="simulate" class="button primary" disabled="@(SimulationValid is false)" @onclick="SimulateAsync">Run simulations</button>
+                </fieldset>
+                @if (lastSimulationSeed is not null)
+                {
+                    <p class="lab-seed">Simulation seed: @lastSimulationSeed</p>
+                }
+                @if (simulationTotal > 0)
+                {
+                    <RunProgress Title="Simulation progress" Completed="completedGames" Total="simulationTotal" Elapsed="simulationElapsed" Running="@(busy && runningTraining is false)" />
+                }
+                @if (standings.Length > 0)
+                {
+                    <div class="lab-table tournament-table"><table><thead><tr><th>Strategy</th><th>Win share</th><th>Average score</th><th>Played last</th><th>Wins playing last</th><th>Shared wins playing last</th></tr></thead><tbody>
+                        @foreach (var standing in standings)
+                        {
+                            <tr><td>@standing.Name</td><td>@standing.WinShare.ToString("P2")</td><td>@standing.AverageScore.ToString("N1")</td><td>@standing.LastSeatGames.ToString("N0")</td><td>@standing.LastSeatWins.ToString("N0")</td><td>@standing.LastSeatSharedWins.ToString("N0")</td></tr>
+                        }
+                    </tbody></table></div>
+                    <p>@completedGames.ToString("N0") matches · seed @completedSeed · @(completedGames < simulationTotal ? "Preliminary results" : "Final results")</p>
+                    <p class="last-seat-summary">The last player won @standings.Sum(standing => standing.LastSeatWins).ToString("N0") / @completedGames.ToString("N0") matches, including @standings.Sum(standing => standing.LastSeatSharedWins).ToString("N0") shared victories. Last-seat win counts include shared victories; the shared column shows that subset.</p>
+                }
+            </section>
+        </div>
+        <div class="lab-status" role="status" aria-live="polite">
+            <p>@status</p>
+            @if (busy)
+            {
+                <button class="button secondary" @onclick="Cancel">Cancel</button>
+            }
+        </div>
+    </main>
+</div>
+
+@code {
+    private readonly HashSet<string> selected = ["Passive", "Bold", "Adaptive", "Expectimax"];
+    private readonly List<TrainingProgress> progress = [];
+    private static readonly string[] comparisonNames = ["Passive", "Bold", "Adaptive", "Expectimax"];
+    private CancellationTokenSource? operation;
+    private bool busy;
+    private string strategyName = "Evolved";
+    private int population = 12;
+    private int generations = 5;
+    private int trainingGames = 200;
+    private int validationGames = 1000;
+    private double mutationPercent = 20;
+    private int maximumPlayers = 6;
+    private string playerCountMode = "varying";
+    private bool VaryPlayerCount => playerCountMode == "varying";
+    private int activeMinimumPlayers = 2;
+    private int activeMaximumPlayers = 6;
+    private int? trainingSeed;
+    private int? lastTrainingSeed;
+    private int simulationGames = 1000;
+    private int? simulationSeed;
+    private int? lastSimulationSeed;
+    private int completedGames;
+    private int completedSeed;
+    private int simulationTotal;
+    private int activeGenerations;
+    private int activePopulation;
+    private LiveTrainingProgress? trainingLive;
+    private readonly Stopwatch runClock = new();
+    private TimeSpan trainingElapsed;
+    private TimeSpan simulationElapsed;
+    private bool runningTraining;
+    private TournamentStanding[] standings = [];
+    private string status = "Ready. Runs locally in your browser; keep this page open while working.";
+    private bool TrainingValid => string.IsNullOrWhiteSpace(strategyName) is false && population is >= 2 and <= 200 && generations is >= 1 and <= 200 && trainingGames is >= 1 and <= 10000 && validationGames is >= 1 and <= 20000 && mutationPercent is >= 0 and <= 100 && maximumPlayers is >= 2 and <= 6;
+    private bool SimulationValid => selected.Count is >= 2 and <= 6 && simulationGames is >= 1 and <= 100000;
+    private string ComparisonLabel => trainingLive?.Phase switch
+    {
+        "Baseline validation" => "Validation: Adaptive baseline",
+        "Evaluating candidates" => $"Current candidate: {trainingLive.Candidate} of {activePopulation}",
+        _ => "Validation: generation winner"
+    };
+    private string ComparisonPlayer => trainingLive?.Phase switch
+    {
+        "Baseline validation" => "Adaptive baseline",
+        "Evaluating candidates" => $"Candidate {trainingLive.Candidate}",
+        _ => "Generation winner"
+    };
+
+    private void Toggle(string name)
+    {
+        if (selected.Remove(name) is false)
+        {
+            selected.Add(name);
+        }
+    }
+
+    private async Task TrainAsync()
+    {
+        if (busy || TrainingValid is false)
+        {
+            return;
+        }
+
+        await RunAsync(async token =>
+        {
+            runningTraining = true;
+            activeGenerations = generations;
+            activePopulation = population;
+            activeMinimumPlayers = VaryPlayerCount ? 2 : maximumPlayers;
+            activeMaximumPlayers = maximumPlayers;
+            trainingLive = null;
+            trainingElapsed = TimeSpan.Zero;
+            progress.Clear();
+            status = "Evaluating the baseline and first generation…";
+            var seed = trainingSeed ?? Random.Shared.Next();
+            lastTrainingSeed = seed;
+            var options = new TrainingOptions { Population = population, Generations = generations, Games = trainingGames, ValidationGames = validationGames, Seed = seed, MutationRate = mutationPercent / 100, MaximumPlayers = maximumPlayers, VaryPlayerCount = VaryPlayerCount };
+            var result = await GeneticOptimizer.TrainAsync(options, item =>
+            {
+                progress.Add(item);
+                status = $"Completed generation {item.Generation} of {generations}.";
+                StateHasChanged();
+            }, token, reportLive: current =>
+            {
+                trainingLive = current;
+                trainingElapsed = runClock.Elapsed;
+                StateHasChanged();
+            });
+            var saved = Library.Add(new StrategyFile(strategyName.Trim(), result.Genes));
+            selected.Add(saved.Name);
+            status = $"Saved {saved.Name} to your session. Validation win share: {result.Validation.WinShare:P2}. Download its JSON to keep it, or return to the game table to play.";
+        });
+    }
+
+    private async Task SimulateAsync()
+    {
+        if (busy || SimulationValid is false)
+        {
+            return;
+        }
+
+        await RunAsync(async token =>
+        {
+            runningTraining = false;
+            completedGames = 0;
+            simulationTotal = simulationGames;
+            simulationElapsed = TimeSpan.Zero;
+            standings = [];
+            status = "Starting simulations…";
+            var seed = simulationSeed ?? Random.Shared.Next();
+            lastSimulationSeed = seed;
+            completedSeed = seed;
+            var participants = Library.Available.Where(strategy => selected.Contains(strategy.Name)).ToArray();
+            standings = await StrategyTournament.RunAsync(participants, simulationGames, seed, cancellationToken: token, reportLive: current =>
+            {
+                completedGames = current.CompletedGames;
+                standings = current.Standings;
+                simulationElapsed = runClock.Elapsed;
+                status = $"Simulating match {current.CompletedGames:N0} of {simulationGames:N0}…";
+                StateHasChanged();
+            });
+            completedGames = simulationGames;
+            completedSeed = seed;
+            status = "Simulations completed.";
+        });
+    }
+
+    private async Task RunAsync(Func<CancellationToken, Task> action)
+    {
+        busy = true;
+        runClock.Restart();
+        operation = new CancellationTokenSource();
+
+        try
+        {
+            await action(operation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            status = "Cancelled. Displayed results are partial; no new strategy was saved.";
+        }
+        finally
+        {
+            busy = false;
+            runClock.Stop();
+
+            if (runningTraining)
+            {
+                trainingElapsed = runClock.Elapsed;
+            }
+            else
+            {
+                simulationElapsed = runClock.Elapsed;
+            }
+
+            operation.Dispose();
+            operation = null;
+        }
+    }
+
+    private void Cancel() => operation?.Cancel();
+
+    public void Dispose()
+    {
+        Cancel();
+    }
+}

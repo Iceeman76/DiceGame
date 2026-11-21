@@ -7,5 +7,5 @@ public sealed class ComputerSeat(string name, string strategy)
     public string Name { get; set; } = name;
     public string Strategy { get; set; } = strategy;
 
-    public IPlayerStrategy CreateStrategy(PlayerStrategies strategies) => strategies.Get(Strategy);
+    public IPlayerStrategy CreateStrategy(StrategyLibrary strategies) => strategies.Get(Strategy);
 }
