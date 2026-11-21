@@ -26,6 +26,18 @@
 .live-phase > span { display: block; min-height: 1.6em; }
 .comparison-scope > * { display: block; min-height: 1.6em; }
 .comparison-scope > strong { color: var(--accent); }
+.strategy-inspector > label { margin-bottom: 8px; }
+.strategy-inspector details { margin-top: 16px; }
+.strategy-inspector summary, .seat-parameters summary { color: var(--accent); cursor: pointer; font-size: 14px; }
+.parameter-list { margin: 16px 0 0; }
+.parameter-row { padding: 14px 0; border-top: 1px solid var(--line); }
+.parameter-row dt { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.parameter-row dd { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+.parameter-row dd > strong { color: var(--accent); margin-right: 12px; }
+.parameter-status { color: var(--muted); font-size: 13px; }
+.parameter-row dd p { font-size: 14px; line-height: 1.6; margin: 8px 0 0; color: var(--muted); }
+.seat-parameters { width: 100%; grid-column: 1 / -1; }
+.seat-parameters .strategy-parameters > p { font-size: 14px; line-height: 1.6; }
 .lab-card fieldset { border: 0; padding: 0; margin: 20px 0; min-width: 0; }
 .lab-card label, .strategy-files > label { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
 .lab-card input:not([type=checkbox]), .strategy-files input { font: inherit; width: 100%; color: inherit; background: #080d17; border: 1px solid var(--line); border-radius: 6px; padding: 10px; }

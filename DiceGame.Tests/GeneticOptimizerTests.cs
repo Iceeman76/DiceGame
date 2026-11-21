@@ -101,7 +101,7 @@ public sealed class GeneticOptimizerTests
         for (var generation = 0; generation < 100; generation++)
         {
             genes = genes.Breed(StrategyGenes.CreateRandom(random), random);
-            var strategy = genes.CreateStrategy();
+            var strategy = (ThresholdStrategy)genes.CreateStrategy();
             var evaluation = StrategyEvaluator.Evaluate(strategy, GeneticOptimizer.Baselines, 1, random.Next());
 
             Assert.That(strategy.MaxTwosToKeepPerRoll, Is.InRange(1, 5));

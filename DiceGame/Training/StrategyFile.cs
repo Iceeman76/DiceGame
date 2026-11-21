@@ -5,7 +5,7 @@ namespace DiceGame.Training;
 
 public sealed record StrategyFile(string Name, StrategyGenes Genes)
 {
-    public int Version { get; init; } = 1;
+    public int Version { get; init; } = Genes is { Family: "Expectimax" } ? 2 : 1;
 
     public string ToJson() => JsonSerializer.Serialize(this, StrategyJsonContext.Default.StrategyFile);
 
@@ -23,9 +23,9 @@ public sealed record StrategyFile(string Name, StrategyGenes Genes)
             ? new StrategyFile(fallbackName, training.GetProperty("Genes").Deserialize(StrategyJsonContext.Default.StrategyGenes)!)
             : root.Deserialize(StrategyJsonContext.Default.StrategyFile)!;
 
-        if (strategy is null || strategy.Version is not 1 || string.IsNullOrWhiteSpace(strategy.Name) || strategy.Name.Length > 60 || strategy.Genes is null || strategy.Genes.IsValid() is false)
+        if (strategy is null || strategy.Version is not (1 or 2) || string.IsNullOrWhiteSpace(strategy.Name) || strategy.Name.Length > 60 || strategy.Genes is null || strategy.Genes.IsValid() is false)
         {
-            throw new JsonException("The file must contain a strategy name and 14 valid genes (version 1).");
+            throw new JsonException("The file must contain a name and valid Threshold or Expectimax genes (version 1 or 2).");
         }
 
         return strategy;

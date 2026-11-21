@@ -45,6 +45,19 @@ public static class TrainingCommand
                 continue;
             }
 
+            if (option == "--strategy-family")
+            {
+                if (value is not ("threshold" or "expectimax"))
+                {
+                    PrintUsage();
+
+                    return 1;
+                }
+
+                options = options with { StrategyFamily = value == "expectimax" ? "Expectimax" : "Threshold" };
+                continue;
+            }
+
             if (option == "--mutation-rate")
             {
                 if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var mutationRate) is false || mutationRate is not (>= 0 and <= 1))
@@ -95,6 +108,7 @@ public static class TrainingCommand
 
         Console.WriteLine($"Training {options.Population} candidates for {options.Generations} generations, seed {options.Seed}, mutation rate {options.MutationRate:P0} per gene.");
         Console.WriteLine(options.VaryPlayerCount ? $"Tables vary from 2 to {options.MaximumPlayers} players." : $"Tables have {options.MaximumPlayers} players.");
+        Console.WriteLine($"Strategy family: {options.StrategyFamily}");
         var result = GeneticOptimizer.Train(options, progress => Console.WriteLine($"Generation {progress.Generation,3}: training {progress.Training.WinShare:P2}, validation {progress.Validation.WinShare:P2}"));
         var testSeed = unchecked(options.Seed ^ 0x617B2E43);
         Console.WriteLine("\nIndependent test using the same table-size settings. Win share ± approximate 95% margin.");
@@ -124,7 +138,7 @@ public static class TrainingCommand
         return evaluation;
     }
 
-    private static void PrintUsage() => Console.WriteLine("Usage: dotnet run --project Simulator -c Release -- train [--population 40] [--generations 20] [--games 500] [--validation-games 2000] [--test-games 10000] [--seed 20261121] [--mutation-rate 0.2] [--players 5 | --max-players 6] [--output evolved-strategy.json]\n       dotnet run --project Simulator -c Release -- evaluate evolved-strategy.json\nUse --players for fixed tables, --max-players for tables varying from 2 to the maximum (default 6). Player counts must be 2–6. Mutation rate must be between 0 and 1. Population must be at least 2; other numbers must be positive.");
+    private static void PrintUsage() => Console.WriteLine("Usage: dotnet run --project Simulator -c Release -- train [--strategy-family threshold|expectimax] [--population 40] [--generations 20] [--games 500] [--validation-games 2000] [--test-games 10000] [--seed 20261121] [--mutation-rate 0.2] [--players 5 | --max-players 6] [--output evolved-strategy.json]\n       dotnet run --project Simulator -c Release -- evaluate evolved-strategy.json\nUse --players for fixed tables, --max-players for tables varying from 2 to the maximum (default 6). Player counts must be 2–6. Mutation rate must be between 0 and 1. Population must be at least 2; other numbers must be positive.");
 }
 
 public sealed record TrainingArtifact(TrainingResult Training, StrategyEvaluation EvolvedTest, StrategyEvaluation AdaptiveTest, StrategyEvaluation ExpectimaxTest);

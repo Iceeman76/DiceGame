@@ -77,12 +77,14 @@ public sealed record ExpectimaxStrategy : IPlayerStrategy
         return finalPolicies.GetOrAdd((gap, tiedOpponents), key => new TurnPolicy(Math.Max(InteractiveGame.MinimumBankScore, key.Gap + DiceSelection.TwoScore), score => score > key.Gap ? 1 : score == key.Gap ? 1d / (key.TiedOpponents + 1) : 0));
     }
 
-    private static int FindBankingBoundary()
+    internal static TurnPolicy CreatePolicy(double maximumAdjustment, Func<int, int, double> utility, double bustValue) => new(FindBankingBoundary(maximumAdjustment), score => score, utility, bustValue);
+
+    private static int FindBankingBoundary(double maximumAdjustment = 0)
     {
         var maximumExpectedScore = outcomes.Skip(1).Max(rolls => rolls.Sum(outcome => outcome.Probability * outcome.Selections.Select(selection => selection.Score).DefaultIfEmpty().Max()));
         var minimumBustProbability = outcomes.Skip(1).Min(rolls => rolls.Where(outcome => outcome.Selections.Length == 0).Sum(outcome => outcome.Probability));
 
-        return (int)Math.Ceiling(maximumExpectedScore / minimumBustProbability / DiceSelection.TwoScore) * DiceSelection.TwoScore;
+        return (int)Math.Ceiling((maximumExpectedScore + 2 * maximumAdjustment) / minimumBustProbability / DiceSelection.TwoScore) * DiceSelection.TwoScore;
     }
 
     private static Outcome[] BuildOutcomes(int diceCount)
@@ -113,7 +115,7 @@ public sealed record ExpectimaxStrategy : IPlayerStrategy
         return frequencies.Select(frequency => new Outcome(GetSelections(frequency.Key.Ones, frequency.Key.Twos, frequency.Key.Fives).ToArray(), (double)frequency.Value / combinations)).ToArray();
     }
 
-    private static IEnumerable<DiceSelection> GetSelections(int availableOnes, int availableTwos, int availableFives)
+    internal static IEnumerable<DiceSelection> GetSelections(int availableOnes, int availableTwos, int availableFives)
     {
         for (var ones = 0; ones <= (availableOnes >= 3 ? 3 : 0); ones += 3)
         {
@@ -134,15 +136,19 @@ public sealed record ExpectimaxStrategy : IPlayerStrategy
 
     private sealed record Outcome(DiceSelection[] Selections, double Probability);
 
-    private sealed class TurnPolicy
+    internal sealed class TurnPolicy
     {
         private readonly Func<int, double> utility;
         private readonly double[,] values;
         private readonly double[,] rollValues;
+        private readonly Func<int, int, double>? positionUtility;
+        private readonly double bustValue;
 
-        public TurnPolicy(int maximumScore, Func<int, double> utility)
+        public TurnPolicy(int maximumScore, Func<int, double> utility, Func<int, int, double>? positionUtility = null, double? bustValue = null)
         {
             this.utility = utility;
+            this.positionUtility = positionUtility;
+            this.bustValue = bustValue ?? utility(0);
             var scoreSteps = (maximumScore + DiceSelection.TwoScore - 1) / DiceSelection.TwoScore;
             values = new double[scoreSteps + 1, 6];
             rollValues = new double[scoreSteps + 1, 6];
@@ -155,13 +161,14 @@ public sealed record ExpectimaxStrategy : IPlayerStrategy
                 {
                     var rollValue = EvaluateRoll(score, diceCount);
                     rollValues[scoreIndex, diceCount] = rollValue;
-                    values[scoreIndex, diceCount] = score >= InteractiveGame.MinimumBankScore ? Math.Max(utility(score), rollValue) : rollValue;
+                    values[scoreIndex, diceCount] = score >= InteractiveGame.MinimumBankScore ? Math.Max(BankValue(score, diceCount), rollValue) : rollValue;
                 }
             }
         }
 
         public double BankValue(int score) => utility(score);
-        public double Value(int score, int diceCount) => score / DiceSelection.TwoScore < values.GetLength(0) ? values[score / DiceSelection.TwoScore, diceCount] : utility(score);
+        public double BankValue(int score, int diceCount) => positionUtility?.Invoke(score, diceCount) ?? utility(score);
+        public double Value(int score, int diceCount) => score / DiceSelection.TwoScore < values.GetLength(0) ? values[score / DiceSelection.TwoScore, diceCount] : BankValue(score, diceCount);
         public double RollValue(int score, int diceCount) => score / DiceSelection.TwoScore < rollValues.GetLength(0) ? rollValues[score / DiceSelection.TwoScore, diceCount] : EvaluateRoll(score, diceCount);
 
         private double EvaluateRoll(int score, int diceCount)
@@ -170,7 +177,7 @@ public sealed record ExpectimaxStrategy : IPlayerStrategy
 
             foreach (var outcome in outcomes[diceCount])
             {
-                var bestValue = outcome.Selections.Length == 0 ? utility(0) : double.NegativeInfinity;
+                var bestValue = outcome.Selections.Length == 0 ? bustValue : double.NegativeInfinity;
 
                 foreach (var selection in outcome.Selections)
                 {

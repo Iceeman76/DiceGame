@@ -18,6 +18,7 @@ public sealed record TrainingOptions
     public double MutationRate { get; init; } = 0.2;
     public int MaximumPlayers { get; init; } = 6;
     public bool VaryPlayerCount { get; init; } = true;
+    public string StrategyFamily { get; init; } = "Threshold";
 }
 
 public sealed record TrainingProgress(int Generation, StrategyEvaluation Training, StrategyEvaluation Validation);
@@ -41,9 +42,10 @@ public static class GeneticOptimizer
     public static async Task<TrainingResult> TrainAsync(TrainingOptions options, Action<TrainingProgress>? report = null, CancellationToken cancellationToken = default, bool yieldToBrowser = true, Action<LiveTrainingProgress>? reportLive = null)
     {
         var random = new Random(options.Seed);
-        var population = new List<StrategyGenes> { StrategyGenes.Adaptive };
+        var baselineGenes = StrategyGenes.Baseline(options.StrategyFamily);
+        var population = new List<StrategyGenes> { baselineGenes };
         var archive = new List<IPlayerStrategy>();
-        var bestGenes = StrategyGenes.Adaptive;
+        var bestGenes = baselineGenes;
         var completedGames = 0L;
         var totalGames = options.ValidationGames + (long)options.Generations * (options.Population * (long)options.Games + options.ValidationGames);
         var bestValidationShare = 0d;
@@ -56,7 +58,7 @@ public static class GeneticOptimizer
 
         while (population.Count < options.Population)
         {
-            population.Add(StrategyGenes.CreateRandom(random));
+            population.Add(StrategyGenes.CreateRandom(random, options.StrategyFamily));
         }
 
         for (var generation = 1; generation <= options.Generations; generation++)
@@ -92,7 +94,7 @@ public static class GeneticOptimizer
                 archive.RemoveAt(0);
             }
 
-            var eliteCount = Math.Max(2, options.Population / 5);
+            var eliteCount = Math.Min(options.Population - 1, Math.Max(2, options.Population / 5));
             population = ranked.Take(eliteCount).Select(candidate => candidate.Genes).ToList();
 
             while (population.Count < options.Population)

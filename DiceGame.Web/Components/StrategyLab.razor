@@ -16,6 +16,7 @@
         <section class="lab-card">
             <h2>Your strategies</h2>
             <StrategyFiles Disabled="busy" Changed="StateHasChanged" />
+            <StrategyInspector />
         </section>
         <div class="lab-grid">
             <section class="lab-card">
@@ -32,9 +33,14 @@
                         <label>Random seed<input id="training-seed" type="number" placeholder="Random" @bind="trainingSeed" /></label>
                         <label>Table size<select id="training-player-mode" @bind="playerCountMode"><option value="varying">Vary from 2 to maximum</option><option value="fixed">Fixed player count</option></select></label>
                         <label>@(VaryPlayerCount ? "Maximum players" : "Players")<input id="training-player-count" type="number" min="2" max="6" @bind="maximumPlayers" /></label>
+                        <label>Strategy family<select id="training-family" @bind="strategyFamily" @bind:after="UpdateDefaultStrategyName"><option value="Threshold">Threshold rules</option><option value="Expectimax">Expectimax search</option></select></label>
                     </div>
                     <p id="mutation-help">Chance to mutate each gene in a new candidate. Elite candidates stay unchanged. At 0%, crossover still combines the parents' genes.</p>
                     <p>Training and validation use the same table sizes. Varying cycles evenly through 2 to the selected maximum.</p>
+                    @if (strategyFamily == "Expectimax")
+                    {
+                        <p>Uses the built-in Expectimax roll search. Evolution tunes risk and estimates of match outcomes and passed positions. Default weights reproduce Expectimax. This family takes more time per match.</p>
+                    }
                     <button id="train" class="button primary" disabled="@(TrainingValid is false)" @onclick="TrainAsync">Start evolution</button>
                 </fieldset>
                 @if (lastTrainingSeed is not null)
@@ -138,6 +144,8 @@
     private bool busy;
     private string strategyName = "Evolved";
     private int population = 12;
+    private string strategyFamily = "Threshold";
+    private string activeBaselineName = "Adaptive";
     private int generations = 5;
     private int trainingGames = 200;
     private int validationGames = 1000;
@@ -168,13 +176,13 @@
     private bool SimulationValid => selected.Count is >= 2 and <= 6 && simulationGames is >= 1 and <= 100000;
     private string ComparisonLabel => trainingLive?.Phase switch
     {
-        "Baseline validation" => "Validation: Adaptive baseline",
+        "Baseline validation" => $"Validation: {activeBaselineName} baseline",
         "Evaluating candidates" => $"Current candidate: {trainingLive.Candidate} of {activePopulation}",
         _ => "Validation: generation winner"
     };
     private string ComparisonPlayer => trainingLive?.Phase switch
     {
-        "Baseline validation" => "Adaptive baseline",
+        "Baseline validation" => $"{activeBaselineName} baseline",
         "Evaluating candidates" => $"Candidate {trainingLive.Candidate}",
         _ => "Generation winner"
     };
@@ -184,6 +192,14 @@
         if (selected.Remove(name) is false)
         {
             selected.Add(name);
+        }
+    }
+
+    private void UpdateDefaultStrategyName()
+    {
+        if (strategyName is "Evolved" or "Evolved Expectimax")
+        {
+            strategyName = strategyFamily == "Expectimax" ? "Evolved Expectimax" : "Evolved";
         }
     }
 
@@ -199,6 +215,7 @@
             runningTraining = true;
             activeGenerations = generations;
             activePopulation = population;
+            activeBaselineName = strategyFamily == "Expectimax" ? "Expectimax" : "Adaptive";
             activeMinimumPlayers = VaryPlayerCount ? 2 : maximumPlayers;
             activeMaximumPlayers = maximumPlayers;
             trainingLive = null;
@@ -207,7 +224,7 @@
             status = "Evaluating the baseline and first generation…";
             var seed = trainingSeed ?? Random.Shared.Next();
             lastTrainingSeed = seed;
-            var options = new TrainingOptions { Population = population, Generations = generations, Games = trainingGames, ValidationGames = validationGames, Seed = seed, MutationRate = mutationPercent / 100, MaximumPlayers = maximumPlayers, VaryPlayerCount = VaryPlayerCount };
+            var options = new TrainingOptions { Population = population, Generations = generations, Games = trainingGames, ValidationGames = validationGames, Seed = seed, MutationRate = mutationPercent / 100, MaximumPlayers = maximumPlayers, VaryPlayerCount = VaryPlayerCount, StrategyFamily = strategyFamily };
             var result = await GeneticOptimizer.TrainAsync(options, item =>
             {
                 progress.Add(item);

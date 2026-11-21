@@ -1,0 +1,20 @@
+<div class="strategy-parameters">
+    <p>@Strategy.Description</p>
+    @if (Strategy is ExpectimaxStrategy)
+    {
+        <p>The built-in strategy uses these baseline values. Train the Expectimax family to evolve the weights.</p>
+    }
+    <dl class="parameter-list">
+        @foreach (var parameter in StrategyParameterCatalog.Describe(Strategy))
+        {
+            <div class="parameter-row" data-parameter="@parameter.Key">
+                <dt>@parameter.Name</dt>
+                <dd><strong>@parameter.Value</strong><span class="parameter-status">@parameter.Status</span><p>@parameter.Description</p></dd>
+            </div>
+        }
+    </dl>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IPlayerStrategy Strategy { get; set; } = default!;
+}

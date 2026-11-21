@@ -18,7 +18,6 @@ public abstract record ThresholdStrategy : IPlayerStrategy
     public ImmutableDictionary<int, int> StopThresholdByDiceCount { get; init; } = ImmutableDictionary<int, int>.Empty;
     public int FinalRoundsCount { get; init; }
     public int MaxRollsPerTurn { get; init; }
-    public int MinInheritedHandDiceToRoll { get; init; } = 1;
     public int MaxTwosToKeepPerRoll { get; init; } = int.MaxValue;
     public int MaxFivesToKeepPerRoll { get; init; } = int.MaxValue;
     public bool SaveTripleOnes { get; init; } = true;
@@ -91,7 +90,7 @@ public abstract record ThresholdStrategy : IPlayerStrategy
 
     public bool ShouldTakePassedDice(GameState state)
     {
-        if (state.InheritedHandDiceCount < Math.Max(TakeInheritanceMinHandDice, MinInheritedHandDiceToRoll))
+        if (state.InheritedHandDiceCount < TakeInheritanceMinHandDice)
         {
             return false;
         }

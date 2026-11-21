@@ -1,0 +1,16 @@
+@inject StrategyLibrary Library
+
+<div class="strategy-inspector">
+    <label for="inspect-strategy">Inspect strategy parameters</label>
+    <select id="inspect-strategy" @bind="strategyName">
+        @foreach (var strategy in Library.Available)
+        {
+            <option value="@strategy.Name">@strategy.Name</option>
+        }
+    </select>
+    <details><summary>Parameters for @strategyName</summary><StrategyParameterTable Strategy="Library.Get(strategyName)" /></details>
+</div>
+
+@code {
+    private string strategyName = "Adaptive";
+}
