@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="docs/images/dicegame-social-preview.png" alt="DiceGame logo" width="1040" />
+</div>
+
 # DiceGame
 
 A dice-rolling risk/reward game engine in C# with pluggable player strategies and a Monte Carlo simulator for evaluating them.
