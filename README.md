@@ -70,7 +70,7 @@ dotnet test DiceGame.slnx
 dotnet publish DiceGame.Web -c Release
 ```
 
-The published `DiceGame.Web/bin/Release/net10.0/publish/wwwroot` directory can be served by a static web host. No backend or account is required. Sound attribution is included in `DiceGame.Web/wwwroot/audio/CREDITS.md`.
+The published `DiceGame.Web/bin/Release/net11.0/publish/wwwroot` directory can be served by a static web host. No backend or account is required. Sound attribution is included in `DiceGame.Web/wwwroot/audio/CREDITS.md`.
 
 The simulator runs five scenarios with 25,000 games each, using seed `20261005`, shuffled seating, and fractional win credit for tied winners:
 

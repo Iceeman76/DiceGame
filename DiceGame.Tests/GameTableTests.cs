@@ -10,6 +10,38 @@ namespace DiceGame.Tests;
 [TestFixture]
 public sealed class GameTableTests
 {
+    [TestCase("load")]
+    [TestCase("save")]
+    [TestCase("enable")]
+    public async Task JavaScriptFailureDoesNotPreventStartingTheMatch(string operation)
+    {
+        await using var context = new BunitContext();
+        context.Services.AddSingleton<StrategyLibrary>();
+        var audio = context.JSInterop.SetupModule("./js/dice-audio.js");
+        audio.Mode = JSRuntimeMode.Loose;
+        var preferences = context.JSInterop.SetupModule("./js/player-preferences.js");
+        preferences.Mode = JSRuntimeMode.Loose;
+        var exception = new Microsoft.JSInterop.JSException("Browser operation failed.");
+
+        if (operation is "load")
+        {
+            preferences.Setup<PlayerNamePreferences?>("load").SetException(exception);
+        }
+        else if (operation is "save")
+        {
+            preferences.SetupVoid("save", _ => true).SetException(exception);
+        }
+        else
+        {
+            audio.SetupVoid("enable").SetException(exception);
+        }
+
+        var component = context.Render<GameTable>();
+        await component.Find(".start-button").ClickAsync(new MouseEventArgs());
+
+        Assert.That(component.FindAll(".opening-table"), Has.Count.EqualTo(1));
+    }
+
     [Test]
     public async Task SavedNamesLoadForHumansAndComputersAndRemainAfterReset()
     {

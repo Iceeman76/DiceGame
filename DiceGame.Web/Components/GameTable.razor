@@ -1,5 +1,7 @@
 @page "/"
 @implements IAsyncDisposable
+@using Microsoft.Extensions.Logging
+@inject ILogger<GameTable> Logger
 @inject IJSRuntime JavaScript
 @inject StrategyLibrary strategies
 
@@ -351,18 +353,25 @@
     {
         if (firstRender)
         {
-            audio = await JavaScript.InvokeAsync<IJSObjectReference>("import", "./js/dice-audio.js");
-            preferences = await JavaScript.InvokeAsync<IJSObjectReference>("import", "./js/player-preferences.js");
-            var savedNames = await preferences.InvokeAsync<PlayerNamePreferences?>("load");
-
-            if (savedNames is not null)
+            try
             {
-                Array.Copy(savedNames.HumanNames, humanNames, Math.Min(savedNames.HumanNames.Length, humanNames.Length));
+                audio = await JavaScript.InvokeAsync<IJSObjectReference>("import", "./js/dice-audio.js");
+                preferences = await JavaScript.InvokeAsync<IJSObjectReference>("import", "./js/player-preferences.js");
+                var savedNames = await preferences.InvokeAsync<PlayerNamePreferences?>("load");
 
-                for (var index = 0; index < Math.Min(savedNames.ComputerNames.Length, seats.Length); index++)
+                if (savedNames is not null)
                 {
-                    seats[index].Name = savedNames.ComputerNames[index];
+                    Array.Copy(savedNames.HumanNames, humanNames, Math.Min(savedNames.HumanNames.Length, humanNames.Length));
+
+                    for (var index = 0; index < Math.Min(savedNames.ComputerNames.Length, seats.Length); index++)
+                    {
+                        seats[index].Name = savedNames.ComputerNames[index];
+                    }
                 }
+            }
+            catch (JSException exception)
+            {
+                Logger.LogWarning(exception, "Unable to initialize audio or load player preferences.");
             }
 
             preferencesLoaded = true;
@@ -503,7 +512,6 @@
         var token = matchLifetime.Token;
         activeMatch.Bank();
         busy = true;
-        StateHasChanged();
 
         try
         {
@@ -606,7 +614,14 @@
 
         if (audio is not null)
         {
-            await audio.InvokeVoidAsync("stop");
+            try
+            {
+                await audio.InvokeVoidAsync("stop");
+            }
+            catch (JSException exception)
+            {
+                Logger.LogWarning(exception, "Unable to stop audio.");
+            }
         }
     }
 
@@ -614,7 +629,14 @@
     {
         if (audio is not null && soundEnabled)
         {
-            await audio.InvokeVoidAsync("enable");
+            try
+            {
+                await audio.InvokeVoidAsync("enable");
+            }
+            catch (JSException exception)
+            {
+                Logger.LogWarning(exception, "Unable to enable audio.");
+            }
         }
     }
 
@@ -625,7 +647,14 @@
 
         if (audio is not null)
         {
-            await audio.InvokeVoidAsync("setMuted", soundEnabled is false);
+            try
+            {
+                await audio.InvokeVoidAsync("setMuted", soundEnabled is false);
+            }
+            catch (JSException exception)
+            {
+                Logger.LogWarning(exception, "Unable to change audio mute state.");
+            }
         }
     }
 
@@ -633,7 +662,14 @@
     {
         if (audio is not null && soundEnabled)
         {
-            await audio.InvokeVoidAsync("play", sound);
+            try
+            {
+                await audio.InvokeVoidAsync("play", sound);
+            }
+            catch (JSException exception)
+            {
+                Logger.LogWarning(exception, "Unable to play audio.");
+            }
         }
     }
 
@@ -661,7 +697,14 @@
     {
         if (preferences is not null && NameValidationMessage is null)
         {
-            await preferences.InvokeVoidAsync("save", new PlayerNamePreferences { HumanNames = humanNames.Select(name => name.Trim()).ToArray(), ComputerNames = seats.Select(seat => seat.Name.Trim()).ToArray() });
+            try
+            {
+                await preferences.InvokeVoidAsync("save", new PlayerNamePreferences { HumanNames = humanNames.Select(name => name.Trim()).ToArray(), ComputerNames = seats.Select(seat => seat.Name.Trim()).ToArray() });
+            }
+            catch (JSException exception)
+            {
+                Logger.LogWarning(exception, "Unable to save player preferences.");
+            }
         }
     }
 
@@ -703,7 +746,14 @@
 
         if (audio is not null)
         {
-            await audio.InvokeVoidAsync("dispose");
+            try
+            {
+                await audio.InvokeVoidAsync("dispose");
+            }
+            catch (JSException exception)
+            {
+                Logger.LogWarning(exception, "Unable to dispose audio.");
+            }
             await audio.DisposeAsync();
         }
     }
